@@ -1,0 +1,3 @@
+[submodule "agents/eliza"]
+    path = agents/eliza
+    url = git@github.com:elizaos/eliza.git
