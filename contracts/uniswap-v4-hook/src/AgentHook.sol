@@ -19,6 +19,7 @@ contract AgentHook is BaseHook {
                            STATE VARIABLES
 //////////////////////////////////////////////////////////////*/
 
+    address public s_hookOwner;
     mapping(address => bool) public s_isAuthorizedAgent;
     mapping(PoolId => bool) public s_isRegisteredPool;
     mapping(PoolId => bool) public s_isDampedPool;
@@ -28,7 +29,9 @@ contract AgentHook is BaseHook {
                            CONSTRUCTOR
 //////////////////////////////////////////////////////////////*/
 
-    constructor(IPoolManager _poolManager) BaseHook(_poolManager) {}
+    constructor(IPoolManager _poolManager, address _hookOwner) BaseHook(_poolManager) {
+        s_hookOwner = _hookOwner;
+    }
 
 /*//////////////////////////////////////////////////////////////
                            HOOK FUNCTIONS
@@ -56,11 +59,11 @@ contract AgentHook is BaseHook {
     function afterInitialize(
         address,
         PoolKey calldata key,
-        IPoolManager.InitializeParams calldata params,
-        bytes calldata
-    ) external override returns (bytes4, int128) {
+        uint160,
+        int24
+    ) external override returns (bytes4) {
         s_isRegisteredPool[key.toId()] = true;
-        return (this.afterInitialize.selector, 0);
+        return (this.afterInitialize.selector);
     }
 
     function afterSwap(
@@ -98,4 +101,70 @@ contract AgentHook is BaseHook {
                            INTERNAL FUNCTIONS
 //////////////////////////////////////////////////////////////*/
 
+
+/*//////////////////////////////////////////////////////////////
+                           GETTERS
+//////////////////////////////////////////////////////////////*/
+
+    function getDampedSqrtPriceX96(PoolId id) public view returns (uint160) {
+        return s_dampedSqrtPriceX96[id];
+    }
+
+    function isDampedPool(PoolId id) public view returns (bool) {
+        return s_isDampedPool[id];
+    }
+
+    function isRegisteredPool(PoolId id) public view returns (bool) {
+        return s_isRegisteredPool[id];
+    }
+
+    function isAuthorizedAgent(address agent) public view returns (bool) {
+        return s_isAuthorizedAgent[agent];
+    } 
+/*//////////////////////////////////////////////////////////////
+                           SETTERS
+//////////////////////////////////////////////////////////////*/
+
+    function setAuthorizedAgent(address agent, bool authorized) public {
+        s_isAuthorizedAgent[agent] = authorized;
+    }
+
+    function setDampedPool(PoolId id, bool damped) public onlyAuthorizedAgent {
+        s_isDampedPool[id] = damped;
+    }
+
+    function setDampedSqrtPriceX96(PoolId id, uint160 sqrtPriceX96) public onlyAuthorizedAgent {
+        s_dampedSqrtPriceX96[id] = sqrtPriceX96;
+    }
+    function setHookOwner(address hookOwner) public onlyHookOwner {
+        s_hookOwner = hookOwner;
+    }
+/*//////////////////////////////////////////////////////////////
+                           MODIFIERS
+//////////////////////////////////////////////////////////////*/
+
+    modifier onlyAuthorizedAgent() {
+        if (!s_isAuthorizedAgent[msg.sender]) revert NotAuthorizedAgent();
+        _;
+    }   
+
+    modifier onlyHookOwner() {
+        if (msg.sender != s_hookOwner) revert NotHookOwner();
+        _;
+    }
+/*//////////////////////////////////////////////////////////////        
+                           ERRORS
+//////////////////////////////////////////////////////////////*/
+
+    error NotAuthorizedAgent();
+    error NotHookOwner();
+
+/*//////////////////////////////////////////////////////////////
+                           EVENTS
+//////////////////////////////////////////////////////////////*/
+
+    event HookOwnerSet(address hookOwner);      
+    event AuthorizedAgentSet(address agent, bool authorized);
+    event DampedPoolSet(PoolId id, bool damped);
+    event DampedSqrtPriceX96Set(PoolId id, uint160 sqrtPriceX96);
 }
