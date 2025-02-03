@@ -70,6 +70,7 @@ contract AgentHook is BaseHook {
         // Emit event that new pool is registered with the hook
         emit PoolRegistered(key);
         s_isRegisteredPool[key.toId()] = true;
+        s_poolKey[key.toId()] = key;
         return (this.afterInitialize.selector);
     }
 
@@ -278,6 +279,10 @@ contract AgentHook is BaseHook {
     function getCurrentFee(PoolId poolId) public view returns (uint24 fee) {
         (, ,uint24 protocolFee, uint24 lpFee) = StateLibrary.getSlot0(poolManager, poolId);
         fee = protocolFee + lpFee;
+    }
+
+    function getPoolKey(PoolId poolId) public view returns (PoolKey memory) {
+        return s_poolKey[poolId];
     }
 
 /*//////////////////////////////////////////////////////////////
