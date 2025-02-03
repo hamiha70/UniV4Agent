@@ -62,6 +62,8 @@ contract AgentHook is BaseHook {
         uint160,
         int24
     ) external override returns (bytes4) {
+        // Emit event that new pool is registered with the hook
+        emit PoolRegistered(key);
         s_isRegisteredPool[key.toId()] = true;
         return (this.afterInitialize.selector);
     }
@@ -78,6 +80,8 @@ contract AgentHook is BaseHook {
         Currency currency = params.zeroForOne ? key.currency1 : key.currency0;
         // If the pool is not in damped state, we can give the delta to the swapper
         if (!s_isDampedPool[key.toId()]) {
+            // Emit event that swap is happening at the pool's current price
+            emit SwapAtPoolPrice(key.toId(), hookDeltaUnspecified, params.zeroForOne);
             poolManager.take(
                 currency,
                 msg.sender,    // The swapper
@@ -96,31 +100,37 @@ contract AgentHook is BaseHook {
         if (params.zeroForOne) {
             if (poolSqrtPriceX96 < dampedSqrtPriceX96) {
                 // token0 -> token1: price = dampedSqrtPriceX96 / poolSqrtPriceX96
-                revert DampedPoolPriceTooHigh(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96);
+                revert AgentHook_DampedPoolPriceTooHigh(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96);
             }
             swapperTokenOut = int128(int256(
-                (uint256(uint128(abs(hookDeltaUnspecified))) * uint256(dampedSqrtPriceX96) / uint256(poolSqrtPriceX96) * uint256(dampedSqrtPriceX96) / uint256(poolSqrtPriceX96))
+                (uint256(uint128(hookDeltaUnspecified >= 0 ? hookDeltaUnspecified : -hookDeltaUnspecified)) * 
+                uint256(dampedSqrtPriceX96) / uint256(poolSqrtPriceX96) * 
+                uint256(dampedSqrtPriceX96) / uint256(poolSqrtPriceX96))
             ));
             hookTokenOut = hookDeltaUnspecified - swapperTokenOut;
             if (hookTokenOut < 0) {
-                revert SwapAmountTooLarge(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96, hookTokenOut, swapperTokenOut);
+                revert AgentHook_SwapAmountTooLarge(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96, hookTokenOut, swapperTokenOut);
             }
         }
 
         if (!params.zeroForOne) {
             if (poolSqrtPriceX96 > dampedSqrtPriceX96) {
-                revert DampedPoolPriceTooLow(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96);
+                revert AgentHook_DampedPoolPriceTooLow(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96);
             }
             swapperTokenOut = int128(int256(
-                (uint256(uint128(abs(hookDeltaUnspecified))) * uint256(poolSqrtPriceX96) / uint256(dampedSqrtPriceX96) * uint256(poolSqrtPriceX96) / uint256(dampedSqrtPriceX96))
+                (uint256(uint128(hookDeltaUnspecified >= 0 ? hookDeltaUnspecified : -hookDeltaUnspecified)) * 
+                uint256(poolSqrtPriceX96) / uint256(dampedSqrtPriceX96) * 
+                uint256(poolSqrtPriceX96) / uint256(dampedSqrtPriceX96))
             ));
             hookTokenOut = hookDeltaUnspecified - swapperTokenOut;
             if (hookTokenOut < 0) {
-                revert SwapAmountTooLarge(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96, hookTokenOut, swapperTokenOut);
+                revert AgentHook_SwapAmountTooLarge(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96, hookTokenOut, swapperTokenOut);
             }
         }
 
         // Distribute to the swapper and the hook
+        // Emit event that swap is happening at the damped price
+        emit SwapAtDampedPrice(key.toId(), swapperTokenOut, hookTokenOut, dampedSqrtPriceX96, poolSqrtPriceX96);
         poolManager.take(
             currency,
             msg.sender, // The swapper
@@ -162,21 +172,37 @@ contract AgentHook is BaseHook {
         }
     }
 
-    function calculatePoolSqrtPriceX96FromBalanceDeltaAndSwapParams(IPoolManager.SwapParams calldata params, BalanceDelta delta) public pure returns (uint160) {
-        // Calculate the poolSqrtPriceX96 from the balance delta and the swap params
-        // poolSqrtPriceX96 = sqrt(balanceDelta / amountIn)
-        uint160 poolSqrtPriceX96 = uint160(uint256(uint128(abs(delta.amount1()))) / uint256(params.amountSpecified));
-        return poolSqrtPriceX96;
-    }
+    function calculatePoolSqrtPriceX96FromBalanceDeltaAndSwapParams(
+        IPoolManager.SwapParams calldata params,
+        BalanceDelta delta
+    ) public pure returns (uint160) {
+        uint256 numerator;
+        uint256 denominator;
 
+        if (params.zeroForOne) {
+            // token0 -> token1: price = amount1/amount0
+            numerator = uint256(uint128(delta.amount1() >= 0 ? uint128(delta.amount1()) : uint128(-delta.amount1())));
+            denominator = uint256(uint128(uint256(params.amountSpecified >= 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified))));
+        } else {
+            // token1 -> token0: price = amount0/amount1
+            numerator = uint256(uint128(delta.amount0() >= 0 ? uint128(delta.amount0()) : uint128(-delta.amount0())));
+            denominator = uint256(uint128(uint256(params.amountSpecified >= 0 ? uint256(params.amountSpecified) : uint256(-params.amountSpecified))));
+        }
+
+        require(denominator > 0, "Invalid amount specified");
+        
+        // Calculate sqrt(price) * 2^96
+        uint160 sqrtPriceX96 = uint160(
+            (uint256(numerator) << 96) / uint256(denominator)
+        );
+
+        return sqrtPriceX96;
+    }
 
 /*//////////////////////////////////////////////////////////////
                            INTERNAL FUNCTIONS
 //////////////////////////////////////////////////////////////*/
 
-    function abs(int128 x) internal pure returns (int128) {
-        return x >= 0 ? x : -x;
-    }
 
 /*//////////////////////////////////////////////////////////////
                            GETTERS
@@ -220,23 +246,23 @@ contract AgentHook is BaseHook {
 //////////////////////////////////////////////////////////////*/
 
     modifier onlyAuthorizedAgent() {
-        if (!s_isAuthorizedAgent[msg.sender]) revert NotAuthorizedAgent();
+        if (!s_isAuthorizedAgent[msg.sender]) revert AgentHook_NotAuthorizedAgent();
         _;
     }   
 
     modifier onlyHookOwner() {
-        if (msg.sender != s_hookOwner) revert NotHookOwner();
+        if (msg.sender != s_hookOwner) revert AgentHook_NotHookOwner();
         _;
     }
 /*//////////////////////////////////////////////////////////////        
                            ERRORS
 //////////////////////////////////////////////////////////////*/
 
-    error NotAuthorizedAgent();
-    error NotHookOwner();
-    error DampedPoolPriceTooHigh(PoolId id, uint160 poolSqrtPriceX96, uint160 dampedSqrtPriceX96);
-    error DampedPoolPriceTooLow(PoolId id, uint160 poolSqrtPriceX96, uint160 dampedSqrtPriceX96);
-    error SwapAmountTooLarge(PoolId id, uint160 poolSqrtPriceX96, uint160 dampedSqrtPriceX96, int128 hookTokenOut, int128 swapperTokenOut);
+    error AgentHook_NotAuthorizedAgent();
+    error AgentHook_NotHookOwner();
+    error AgentHook_DampedPoolPriceTooHigh(PoolId id, uint160 poolSqrtPriceX96, uint160 dampedSqrtPriceX96);
+    error AgentHook_DampedPoolPriceTooLow(PoolId id, uint160 poolSqrtPriceX96, uint160 dampedSqrtPriceX96);
+    error AgentHook_SwapAmountTooLarge(PoolId id, uint160 poolSqrtPriceX96, uint160 dampedSqrtPriceX96, int128 hookTokenOut, int128 swapperTokenOut);
 /*//////////////////////////////////////////////////////////////
                            EVENTS
 //////////////////////////////////////////////////////////////*/
@@ -245,5 +271,7 @@ contract AgentHook is BaseHook {
     event AuthorizedAgentSet(address agent, bool authorized);
     event DampedPoolSet(PoolId id, bool damped);
     event DampedSqrtPriceX96Set(PoolId id, uint160 sqrtPriceX96);
-    event SwapAtDampedPrice(PoolId indexed id, int128 indexed swapperTokenOut, int128 indexed hookTokenOut, uint160 dampedSqrtPriceX96, uint160 poolSqrtPriceX96, PoolKey key);
+    event PoolRegistered(PoolKey key);
+    event SwapAtPoolPrice(PoolId indexed id, int128 indexed swapperTokenOut, bool indexed zeroForOne);
+    event SwapAtDampedPrice(PoolId indexed id, int128 indexed swapperTokenOut, int128 indexed hookTokenOut, uint160 dampedSqrtPriceX96, uint160 poolSqrtPriceX96);
 }
