@@ -76,4 +76,28 @@ contract AgentHookTest is Test, Deployers {
         assertFalse(hook.isAuthorizedAgent(AGENT));
         vm.stopPrank();
     }
+
+        function test_SetHookOwner_AsOwner() public {
+        address NEW_HOOK_OWNER = makeAddr("NEW_HOOK_OWNER");
+        vm.startPrank(HOOK_OWNER);
+        
+        // Test changing hook owner
+        vm.expectEmit(true, false, false, true);
+        emit HookOwnerSet(NEW_HOOK_OWNER);
+        hook.setHookOwner(NEW_HOOK_OWNER);
+        assertEq(hook.s_hookOwner(), NEW_HOOK_OWNER);
+        
+        vm.stopPrank();
+    }
+
+    function test_SetHookOwner_AsNonOwner() public {
+        address NEW_HOOK_OWNER = makeAddr("NEW_HOOK_OWNER");
+        vm.startPrank(NON_HOOK_OWNER);
+        
+        vm.expectRevert(AgentHook.AgentHook_NotHookOwner.selector);
+        hook.setHookOwner(NEW_HOOK_OWNER);
+        
+        assertEq(hook.s_hookOwner(), HOOK_OWNER);
+        vm.stopPrank();
+    }
 }

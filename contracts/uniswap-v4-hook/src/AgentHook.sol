@@ -296,9 +296,9 @@ contract AgentHook is BaseHook {
         s_directionZeroForOne[id] = _directionZeroForOne;
     }
 
-    function setHookOwner(address hookOwner) public onlyHookOwner {
-        emit HookOwnerSet(hookOwner);
-        s_hookOwner = hookOwner;
+    function setHookOwner(address newHookOwner) public onlyHookOwner {
+        emit HookOwnerSet(newHookOwner);
+        s_hookOwner = newHookOwner;
     }
 
     function resetDampedPool(PoolId id) public onlyHookOwner {
@@ -333,12 +333,12 @@ contract AgentHook is BaseHook {
                            EVENTS
 //////////////////////////////////////////////////////////////*/
 
-    event HookOwnerSet(address hookOwner);      
+    event HookOwnerSet(address indexed hookOwner);      
     event AuthorizedAgentSet(address indexed agent, bool authorized);
-    event DampedPoolSet(PoolId id, bool damped, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
-    event DampedPoolReset(PoolId id);
-    event DampedSqrtPriceX96Set(PoolId id, uint160 sqrtPriceX96);
+    event DampedPoolSet(PoolId indexed id, bool damped, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
+    event DampedPoolReset(PoolId indexed id);
+    event DampedSqrtPriceX96Set(PoolId indexed id, uint160 sqrtPriceX96);
     event PoolRegistered(PoolKey key);
-    event SwapAtPoolPrice(PoolId indexed id, int128 indexed swapperTokenOut, bool indexed zeroForOne);
-    event SwapAtDampedPrice(PoolId indexed id, int128 indexed swapperTokenOut, int128 indexed hookTokenOut, uint160 dampedSqrtPriceX96, uint160 poolSqrtPriceX96);
+    event SwapAtPoolPrice(PoolId indexed id, int128 swapperTokenOut, bool zeroForOne);
+    event SwapAtDampedPrice(PoolId indexed id, int128 swapperTokenOut, int128 hookTokenOut, uint160 dampedSqrtPriceX96, uint160 poolSqrtPriceX96);
 }
