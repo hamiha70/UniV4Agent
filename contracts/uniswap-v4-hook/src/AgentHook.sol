@@ -9,6 +9,7 @@ import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
+import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 
 
 contract AgentHook is BaseHook {
@@ -24,6 +25,9 @@ contract AgentHook is BaseHook {
     mapping(PoolId => bool) public s_isRegisteredPool;
     mapping(PoolId => bool) public s_isDampedPool;
     mapping(PoolId => uint160) public s_dampedSqrtPriceX96;
+    mapping(PoolId => bool) public s_directionZeroForOne;
+    mapping(PoolId => PoolKey) public s_poolKey;
+    // IPoolManager public poolManager; -> Inherited from Basehook
 
 /*//////////////////////////////////////////////////////////////
                            CONSTRUCTOR
@@ -32,6 +36,7 @@ contract AgentHook is BaseHook {
     constructor(IPoolManager _poolManager, address _hookOwner) BaseHook(_poolManager) {
         s_hookOwner = _hookOwner;
     }
+    // Bashook exposes the poolManager to the hook as a state variable
 
 /*//////////////////////////////////////////////////////////////
                            HOOK FUNCTIONS
@@ -78,8 +83,10 @@ contract AgentHook is BaseHook {
         // Extract the delta from the swap that we need to gi
         int128 hookDeltaUnspecified = params.zeroForOne ? delta.amount1() : delta.amount0();
         Currency currency = params.zeroForOne ? key.currency1 : key.currency0;
-        // If the pool is not in damped state, we can give the delta to the swapper
-        if (!s_isDampedPool[key.toId()]) {
+        // Two conditions when the pool should swap as normal
+        // 1. The pool is not in damped state
+        // 2. The swap direction is not the same as the damped direction
+        if (!s_isDampedPool[key.toId()] || !s_directionZeroForOne[key.toId()]) {
             // Emit event that swap is happening at the pool's current price
             emit SwapAtPoolPrice(key.toId(), hookDeltaUnspecified, params.zeroForOne);
             poolManager.take(
@@ -89,8 +96,16 @@ contract AgentHook is BaseHook {
             );
             return (this.afterSwap.selector, hookDeltaUnspecified);
         }
-        // If the pool is in damped state, we need to calculate the delta that the hook and the swapper will share
-        // determine the delta that the hook and the swapper will share
+
+        // Arriving here, we need to swap at the damped price
+        // We need to calculate the delta that the hook and the swapper will share
+        // We determine the share of the swapper and the hook.
+        // We need to check if the swapper's delta is too large
+        // If it is, we revert
+        // If it is not, we swap at the damped price
+        // We need to make the Poolmanager take the delta from the swapper and the hook ... so that tokens can be distributed
+        // We need to emit events that the swap is happening at the damped price
+        // We need to return the selector and the total dela
         int128 hookTokenOut;
         int128 swapperTokenOut;
         uint160 dampedSqrtPriceX96 = getDampedSqrtPriceX96(key.toId());
@@ -98,7 +113,7 @@ contract AgentHook is BaseHook {
 
         // Need to distinguish between zeroForOne and oneForZero
         if (params.zeroForOne) {
-            if (poolSqrtPriceX96 < dampedSqrtPriceX96) {
+            if (poolSqrtPriceX96 <= dampedSqrtPriceX96) {
                 // token0 -> token1: price = dampedSqrtPriceX96 / poolSqrtPriceX96
                 revert AgentHook_DampedPoolPriceTooHigh(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96);
             }
@@ -149,10 +164,11 @@ contract AgentHook is BaseHook {
                            PUBLIC & EXTERNAL FUNCTIONS
 //////////////////////////////////////////////////////////////*/
 
-    function calculateSwapReturnSimplified(
+    function calculateSwapReturnSimplifiedAndUndamped(
         int128 amountIn,
         bool zeroForOne,
-        uint160 sqrtPriceX96
+        uint160 sqrtPriceX96,
+        uint24 fee
     ) public pure returns (int128 amountOut) {
         require(sqrtPriceX96 > 0, "Invalid sqrt price");
 
@@ -170,8 +186,35 @@ contract AgentHook is BaseHook {
             // amountOut = amountIn / price
             amountOut = -int128(int256((uint256(int256(amountIn)) * price) >> 96));
         }
+        // Apply the fee to the amountOut. Fee is in hundredths of a bip (10000)
+        // Fee comes from sum of lpFee and protocolFee
+        amountOut = amountOut * int128(uint128(1_000_000_000 - uint256(fee))) / 1_000_000_000;
+        return amountOut;
     }
 
+    // This function is used to calculate the swap return simplified based on the pool's current state BEFORE the swap has executed
+    // It DOES NOT take into account the slippage
+    // It DOES take into account the fee
+    // It is NOT USED to calculate the swap return for the swapper and the hook in the damped state because it is an approximation
+    function calculateSwapReturnSimplified(
+        PoolId poolId,
+        bool zeroForOne,
+        int128 amountIn
+    ) public view returns (int128 amountOut) {
+        uint160 dampedSqrtPriceX96 = getDampedSqrtPriceX96(poolId);
+        uint160 poolSqrtPriceX96 = getCurrentSqrtPriceX96(poolId);
+        uint24 fee = getCurrentFee(poolId);
+        if (s_isDampedPool[poolId] && s_directionZeroForOne[poolId]) {
+            return calculateSwapReturnSimplifiedAndUndamped(amountIn, zeroForOne, poolSqrtPriceX96, fee);
+        } else {
+            return calculateSwapReturnSimplifiedAndUndamped(amountIn, zeroForOne, dampedSqrtPriceX96, fee);
+        }
+    }
+
+    // This function is used to calculate the sqrtPriceX96 from the balance delta and the swap params
+    // It deduces it after the swap has executed through the poolManager
+    // It is used to calculate the swap return for the swapper and the hook in the damped state
+    // It does not introduce an approximation
     function calculatePoolSqrtPriceX96FromBalanceDeltaAndSwapParams(
         IPoolManager.SwapParams calldata params,
         BalanceDelta delta
@@ -223,23 +266,46 @@ contract AgentHook is BaseHook {
     function isAuthorizedAgent(address agent) public view returns (bool) {
         return s_isAuthorizedAgent[agent];
     } 
+
+    function getCurrentSqrtPriceX96TickAndFees(PoolId poolId) public view returns (uint160 sqrtPriceX96, int24 tick, uint24 protocolFee, uint24 lpFee) {
+        (sqrtPriceX96, tick, protocolFee, lpFee) = StateLibrary.getSlot0(poolManager, poolId);
+    }
+
+    function getCurrentSqrtPriceX96(PoolId poolId) public view returns (uint160 sqrtPriceX96) {
+        (sqrtPriceX96,,,) = StateLibrary.getSlot0(poolManager, poolId);
+    }
+
+    function getCurrentFee(PoolId poolId) public view returns (uint24 fee) {
+        (, ,uint24 protocolFee, uint24 lpFee) = StateLibrary.getSlot0(poolManager, poolId);
+        fee = protocolFee + lpFee;
+    }
+
 /*//////////////////////////////////////////////////////////////
                            SETTERS
 //////////////////////////////////////////////////////////////*/
 
-    function setAuthorizedAgent(address agent, bool authorized) public {
+    function setAuthorizedAgent(address agent, bool authorized) public onlyHookOwner {
+        emit AuthorizedAgentSet(agent, authorized);
         s_isAuthorizedAgent[agent] = authorized;
     }
 
-    function setDampedPool(PoolId id, bool damped) public onlyAuthorizedAgent {
-        s_isDampedPool[id] = damped;
+    function setDampedPool(PoolId id, bool _damped, uint160 _dampedSqrtPriceX96, bool _directionZeroForOne) public onlyAuthorizedAgent {
+        emit DampedPoolSet(id, _damped, _dampedSqrtPriceX96, _directionZeroForOne);
+        s_isDampedPool[id] = _damped;
+        s_dampedSqrtPriceX96[id] = _dampedSqrtPriceX96;
+        s_directionZeroForOne[id] = _directionZeroForOne;
     }
 
-    function setDampedSqrtPriceX96(PoolId id, uint160 sqrtPriceX96) public onlyAuthorizedAgent {
-        s_dampedSqrtPriceX96[id] = sqrtPriceX96;
-    }
     function setHookOwner(address hookOwner) public onlyHookOwner {
+        emit HookOwnerSet(hookOwner);
         s_hookOwner = hookOwner;
+    }
+
+    function resetDampedPool(PoolId id) public onlyHookOwner {
+        emit DampedPoolReset(id);
+        s_isDampedPool[id] = false;
+        s_dampedSqrtPriceX96[id] = 0;
+        s_directionZeroForOne[id] = false;
     }
 /*//////////////////////////////////////////////////////////////
                            MODIFIERS
@@ -269,7 +335,8 @@ contract AgentHook is BaseHook {
 
     event HookOwnerSet(address hookOwner);      
     event AuthorizedAgentSet(address agent, bool authorized);
-    event DampedPoolSet(PoolId id, bool damped);
+    event DampedPoolSet(PoolId id, bool damped, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
+    event DampedPoolReset(PoolId id);
     event DampedSqrtPriceX96Set(PoolId id, uint160 sqrtPriceX96);
     event PoolRegistered(PoolKey key);
     event SwapAtPoolPrice(PoolId indexed id, int128 indexed swapperTokenOut, bool indexed zeroForOne);
