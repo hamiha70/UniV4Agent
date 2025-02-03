@@ -16,6 +16,8 @@ contract AgentHookTest is Test, Deployers {
     // Test Addresses
     address public HOOK_OWNER = makeAddr("HOOK_OWNER");
     address public AGENT = makeAddr("AGENT");
+    address public NON_HOOK_OWNER = makeAddr("NON_HOOK_OWNER");
+    address public NON_AGENT = makeAddr("NON_AGENT");
     
     // Events from AgentHook contract
     event AuthorizedAgentSet(address indexed agent, bool authorized);
@@ -45,5 +47,33 @@ contract AgentHookTest is Test, Deployers {
     function test_InitialState() public view{
         assertEq(hook.s_hookOwner(), HOOK_OWNER);
         assertFalse(hook.isAuthorizedAgent(AGENT));
+    }
+
+    function test_SetAgent_AsOwner() public {
+        vm.startPrank(HOOK_OWNER);
+        
+        // Test authorizing an agent
+        vm.expectEmit(true, false, false, true);
+        emit AuthorizedAgentSet(AGENT, true);
+        hook.setAuthorizedAgent(AGENT, true);
+        assertTrue(hook.isAuthorizedAgent(AGENT));
+        
+        // Test unauthorizing the agent
+        vm.expectEmit(true, false, false, true);
+        emit AuthorizedAgentSet(AGENT, false);
+        hook.setAuthorizedAgent(AGENT, false);
+        assertFalse(hook.isAuthorizedAgent(AGENT));
+        
+        vm.stopPrank();
+    }
+
+    function test_SetAgent_AsNonOwner() public {
+        vm.startPrank(NON_HOOK_OWNER);
+        
+        vm.expectRevert(AgentHook.AgentHook_NotHookOwner.selector);
+        hook.setAuthorizedAgent(AGENT, true);
+        
+        assertFalse(hook.isAuthorizedAgent(AGENT));
+        vm.stopPrank();
     }
 }

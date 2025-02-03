@@ -21,12 +21,12 @@ contract AgentHook is BaseHook {
 //////////////////////////////////////////////////////////////*/
 
     address public s_hookOwner;
-    mapping(address => bool) public s_isAuthorizedAgent;
-    mapping(PoolId => bool) public s_isRegisteredPool;
-    mapping(PoolId => bool) public s_isDampedPool;
-    mapping(PoolId => uint160) public s_dampedSqrtPriceX96;
-    mapping(PoolId => bool) public s_directionZeroForOne;
-    mapping(PoolId => PoolKey) public s_poolKey;
+    mapping(address => bool) s_isAuthorizedAgent;
+    mapping(PoolId => bool) s_isRegisteredPool;
+    mapping(PoolId => bool) s_isDampedPool;
+    mapping(PoolId => uint160) s_dampedSqrtPriceX96;
+    mapping(PoolId => bool) s_directionZeroForOne;
+    mapping(PoolId => PoolKey) s_poolKey;
     // IPoolManager public poolManager; -> Inherited from Basehook
 
 /*//////////////////////////////////////////////////////////////
@@ -334,7 +334,7 @@ contract AgentHook is BaseHook {
 //////////////////////////////////////////////////////////////*/
 
     event HookOwnerSet(address hookOwner);      
-    event AuthorizedAgentSet(address agent, bool authorized);
+    event AuthorizedAgentSet(address indexed agent, bool authorized);
     event DampedPoolSet(PoolId id, bool damped, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
     event DampedPoolReset(PoolId id);
     event DampedSqrtPriceX96Set(PoolId id, uint160 sqrtPriceX96);
