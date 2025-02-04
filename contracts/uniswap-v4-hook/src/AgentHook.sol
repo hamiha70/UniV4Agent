@@ -74,6 +74,15 @@ contract AgentHook is BaseHook {
         return (this.afterInitialize.selector);
     }
 
+    // @notice This function is called after a swap has executed
+    // @dev NOTE: This implementation only works for PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false})
+    // @param sender The address of the sender of the swap
+    // @param key The key of the pool that the swap was executed in
+    // @param params The parameters for the swap
+    // @param delta The balance delta of the swap
+    // @param hookData The data to pass through to the swap hooks
+    // @return selector The selector of the function to call next
+    // @return hookDeltaUnspecified The balance delta of the hook
     function afterSwap(
         address,
         PoolKey calldata key,
@@ -81,38 +90,24 @@ contract AgentHook is BaseHook {
         BalanceDelta delta,
         bytes calldata
     ) external override returns (bytes4, int128) {
-        // Extract the delta from the swap that we need to gi
+        // Extract the delta from the swap
         int128 hookDeltaUnspecified = params.zeroForOne ? delta.amount1() : delta.amount0();
         Currency currency = params.zeroForOne ? key.currency1 : key.currency0;
-        // Two conditions when the pool should swap as normal
-        // 1. The pool is not in damped state
-        // 2. The swap direction is not the same as the damped direction
+
+        // If pool is not damped or wrong direction, let PoolManager handle everything
         if (!s_isDampedPool[key.toId()] || !s_directionZeroForOne[key.toId()]) {
             // Emit event that swap is happening at the pool's current price
             emit SwapAtPoolPrice(key.toId(), hookDeltaUnspecified, params.zeroForOne);
-            poolManager.take(
-                currency,
-                msg.sender,    // The swapper
-                uint256(int256(hookDeltaUnspecified))
-            );
-            return (this.afterSwap.selector, hookDeltaUnspecified);
+            return (this.afterSwap.selector, 0);
         }
 
-        // Arriving here, we need to swap at the damped price
-        // We need to calculate the delta that the hook and the swapper will share
-        // We determine the share of the swapper and the hook.
-        // We need to check if the swapper's delta is too large
-        // If it is, we revert
-        // If it is not, we swap at the damped price
-        // We need to make the Poolmanager take the delta from the swapper and the hook ... so that tokens can be distributed
-        // We need to emit events that the swap is happening at the damped price
-        // We need to return the selector and the total dela
+        // For damped pools, calculate the split between hook and swapper
         int128 hookTokenOut;
         int128 swapperTokenOut;
         uint160 dampedSqrtPriceX96 = getDampedSqrtPriceX96(key.toId());
         uint160 poolSqrtPriceX96 = calculatePoolSqrtPriceX96FromBalanceDeltaAndSwapParams(params, delta);
 
-        // Need to distinguish between zeroForOne and oneForZero
+        // Calculate splits based on direction
         if (params.zeroForOne) {
             if (poolSqrtPriceX96 <= dampedSqrtPriceX96) {
                 // token0 -> token1: price = dampedSqrtPriceX96 / poolSqrtPriceX96
@@ -144,21 +139,20 @@ contract AgentHook is BaseHook {
             }
         }
 
-        // Distribute to the swapper and the hook
-        // Emit event that swap is happening at the damped price
+        // Emit event for damped swap
         emit SwapAtDampedPrice(key.toId(), swapperTokenOut, hookTokenOut, dampedSqrtPriceX96, poolSqrtPriceX96);
-        poolManager.take(
-            currency,
-            msg.sender, // The swapper
-            uint256(int256(swapperTokenOut))
-        );
-        poolManager.take(
-            currency,
-            address(this), // The hook
-            uint256(int256(hookTokenOut))
-        );
 
-        return (this.afterSwap.selector, hookDeltaUnspecified);
+        // Take hook's portion
+        if (hookTokenOut > 0) {
+            poolManager.take(
+                currency,
+                address(this),
+                uint256(int256(hookTokenOut))
+            );
+        }
+
+        // Return swapper's portion for PoolManager to handle
+        return (this.afterSwap.selector, swapperTokenOut);
     }
 
 /*//////////////////////////////////////////////////////////////

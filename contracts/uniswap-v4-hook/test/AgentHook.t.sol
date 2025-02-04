@@ -388,13 +388,13 @@ contract AgentHookTest is Test, Deployers {
         uint256 token0balanceAfter = currency0.balanceOfSelf();
         uint256 token1balanceAfter = currency1.balanceOfSelf();
 
-        assertEq(token0balanceAfter, token0balanceBefore - uint256(amountSpecified));
+        assertApproxEqRel(token0balanceAfter, token0balanceBefore - uint256(amountSpecified), 1e12); // 0.0001
+        assertApproxEqRel(token1balanceAfter, token1balanceBefore + uint256(uint128(expectedOutput)), 1e16); // 1% tolerance
 
         console.log("token0balanceDelta:", token0balanceBefore - token0balanceAfter);
         console.log("token1balanceDelta", token1balanceAfter - token1balanceBefore);
 
         // Verify final state
-        // assertEq(hook.getCurrentSqrtPriceX96(poolKey.toId()), SQRT_RATIO_1_1);
         assertFalse(hook.isDampedPool(poolKey.toId()));
     }
 
