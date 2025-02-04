@@ -276,6 +276,10 @@ contract AgentHook is BaseHook {
         (sqrtPriceX96,,,) = StateLibrary.getSlot0(poolManager, poolId);
     }
 
+    function getCurrentDirectionZeroForOne(PoolId poolId) public view returns (bool) {
+        return s_directionZeroForOne[poolId];
+    }
+
     function getCurrentFee(PoolId poolId) public view returns (uint24 fee) {
         (, ,uint24 protocolFee, uint24 lpFee) = StateLibrary.getSlot0(poolManager, poolId);
         fee = protocolFee + lpFee;
@@ -294,9 +298,9 @@ contract AgentHook is BaseHook {
         s_isAuthorizedAgent[agent] = authorized;
     }
 
-    function setDampedPool(PoolId id, bool _damped, uint160 _dampedSqrtPriceX96, bool _directionZeroForOne) public onlyAuthorizedAgent {
-        emit DampedPoolSet(id, _damped, _dampedSqrtPriceX96, _directionZeroForOne);
-        s_isDampedPool[id] = _damped;
+    function setDampedPool(PoolId id, uint160 _dampedSqrtPriceX96, bool _directionZeroForOne) public onlyAuthorizedAgent {
+        emit DampedPoolSet(id, _dampedSqrtPriceX96, _directionZeroForOne);
+        s_isDampedPool[id] = true;
         s_dampedSqrtPriceX96[id] = _dampedSqrtPriceX96;
         s_directionZeroForOne[id] = _directionZeroForOne;
     }
@@ -340,7 +344,7 @@ contract AgentHook is BaseHook {
 
     event HookOwnerSet(address indexed hookOwner);      
     event AuthorizedAgentSet(address indexed agent, bool authorized);
-    event DampedPoolSet(PoolId indexed id, bool damped, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
+    event DampedPoolSet(PoolId indexed id, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
     event DampedPoolReset(PoolId indexed id);
     event DampedSqrtPriceX96Set(PoolId indexed id, uint160 sqrtPriceX96);
     event PoolRegistered(PoolKey key);

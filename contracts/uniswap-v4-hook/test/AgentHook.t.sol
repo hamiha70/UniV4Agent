@@ -28,7 +28,7 @@ contract AgentHookTest is Test, Deployers {
     // Events from AgentHook contract
     event AuthorizedAgentSet(address indexed agent, bool authorized);
     event PoolRegistered(PoolKey key);
-    event DampedPoolSet(PoolId indexed id, bool damped, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
+    event DampedPoolSet(PoolId indexed id, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
     event HookOwnerSet(address indexed hookOwner);
     event DampedPoolReset(PoolId indexed id);
     event SwapAtPoolPrice(PoolId indexed id, int128 hookDeltaUnspecified, bool zeroForOne);
@@ -189,5 +189,95 @@ contract AgentHookTest is Test, Deployers {
         assertEq(storedKey.fee, poolKey.fee);
         assertEq(storedKey.tickSpacing, poolKey.tickSpacing);
         assertEq(address(storedKey.hooks), address(poolKey.hooks));
+    }
+
+    function test_SetDampedPool_AsAgent() public withAgent withPool {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+        
+        uint160 dampedPrice = SQRT_RATIO_1_1 * 2; // Double the current price
+        bool isDamped = true;
+        bool directionZeroForOne = true;
+        
+        vm.startPrank(AGENT);
+        vm.expectEmit(true, false, false, true);
+        emit DampedPoolSet(poolKey.toId(), dampedPrice, directionZeroForOne);
+        hook.setDampedPool(poolKey.toId(), dampedPrice, directionZeroForOne);
+        
+        assertTrue(hook.isDampedPool(poolKey.toId()));
+        assertEq(hook.getDampedSqrtPriceX96(poolKey.toId()), dampedPrice);
+        assertTrue(hook.getCurrentDirectionZeroForOne(poolKey.toId()));
+        vm.stopPrank();
+    }
+
+    function test_SetDampedPool_AsNonAgent() public withPool {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        
+        vm.startPrank(NON_AGENT);
+        vm.expectRevert(AgentHook.AgentHook_NotAuthorizedAgent.selector);
+        hook.setDampedPool(poolKey.toId(), SQRT_RATIO_1_1, true);
+        vm.stopPrank();
+    }
+
+    function test_ResetDampedPool_AsOwner() public withAgent withPool {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+        
+        // First set the pool as damped
+        vm.prank(AGENT);
+        hook.setDampedPool(poolKey.toId(), SQRT_RATIO_1_1 * 2, true);
+        
+        // Then reset it as owner
+        vm.startPrank(HOOK_OWNER);
+        vm.expectEmit(true, false, false, true);
+        emit DampedPoolReset(poolKey.toId());
+        hook.resetDampedPool(poolKey.toId());
+        
+        assertFalse(hook.isDampedPool(poolKey.toId()));
+        assertEq(hook.getDampedSqrtPriceX96(poolKey.toId()), 0);
+        assertFalse(hook.getCurrentDirectionZeroForOne(poolKey.toId()));
+        vm.stopPrank();
+    }
+
+    function test_ResetDampedPool_AsNonOwner() public withAgent withPool {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+        
+        // First set the pool as damped
+        vm.prank(AGENT);
+        hook.setDampedPool(poolKey.toId(), SQRT_RATIO_1_1 * 2, true);
+        
+        // Try to reset as non-owner
+        vm.startPrank(NON_HOOK_OWNER);
+        vm.expectRevert(AgentHook.AgentHook_NotHookOwner.selector);
+        hook.resetDampedPool(poolKey.toId());
+        vm.stopPrank();
+        
+        // Verify state hasn't changed
+        assertTrue(hook.isDampedPool(poolKey.toId()));
+        assertEq(hook.getDampedSqrtPriceX96(poolKey.toId()), SQRT_RATIO_1_1 * 2);
+        assertTrue(hook.getCurrentDirectionZeroForOne(poolKey.toId()));
     }
 }
