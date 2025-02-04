@@ -9,23 +9,43 @@ import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
+import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
+import {MockERC20} from "@uniswap/v4-core/lib/solmate/src/test/utils/mocks/MockERC20.sol";
+import {TickMath} from "v4-core/libraries/TickMath.sol";
 
 contract AgentHookTest is Test, Deployers {
     using CurrencyLibrary for Currency;
+    using StateLibrary for IPoolManager;
+
+/*//////////////////////////////////////////////////////////////
+                            STATE VARIABLES
+//////////////////////////////////////////////////////////////*/  
     AgentHook public hook;
 
-    // Constants
+/*//////////////////////////////////////////////////////////////
+                            CONSTANTS
+//////////////////////////////////////////////////////////////*/
     uint160 constant SQRT_RATIO_1_1 = 79228162514264337593543950336;  // 1:1 price
+    uint160 constant SQRT_RATIO_2_1 = 112807967156250000000000000000; // 2:1 price
+    uint160 constant SQRT_RATIO_1_2 = 56403983578125000000000000000; // 1:2 price
+    uint160 constant MIN_SQRT_PRICE = TickMath.MIN_SQRT_PRICE + 1;
     uint24 constant FEE = 3000;
     int24 constant TICK_SPACING = 60;
+    int128 constant LIQUIDITY_DELTA = 10 * 1e18;
+    int128 constant AMOUNT_SPECIFIED = 1e16;
     
-    // Test Addresses
+/*//////////////////////////////////////////////////////////////
+                            ADDRESSES
+//////////////////////////////////////////////////////////////*/
     address public HOOK_OWNER = makeAddr("HOOK_OWNER");
     address public AGENT = makeAddr("AGENT");
     address public NON_HOOK_OWNER = makeAddr("NON_HOOK_OWNER");
     address public NON_AGENT = makeAddr("NON_AGENT");
     
-    // Events from AgentHook contract
+/*//////////////////////////////////////////////////////////////
+                            EVENTS (from AgentHook)
+//////////////////////////////////////////////////////////////*/
     event AuthorizedAgentSet(address indexed agent, bool authorized);
     event PoolRegistered(PoolKey key);
     event DampedPoolSet(PoolId indexed id, uint160 dampedSqrtPriceX96, bool directionZeroForOne);
@@ -34,9 +54,24 @@ contract AgentHookTest is Test, Deployers {
     event SwapAtPoolPrice(PoolId indexed id, int128 hookDeltaUnspecified, bool zeroForOne);
     event SwapAtDampedPrice(PoolId indexed id, int128 swapperTokenOut, int128 hookTokenOut, uint160 dampedSqrtPriceX96, uint160 poolSqrtPriceX96);
     
+/*//////////////////////////////////////////////////////////////
+                            SETUP
+//////////////////////////////////////////////////////////////*/
     function setUp() public {
         deployFreshManagerAndRouters();
         (currency0, currency1) = deployAndMint2Currencies();
+        
+        // Mint tokens to the test contract
+        MockERC20(Currency.unwrap(currency0)).mint(address(this), 1000e18);
+        MockERC20(Currency.unwrap(currency1)).mint(address(this), 1000e18);
+        
+        // Approve the router to spend our tokens
+        MockERC20(Currency.unwrap(currency0)).approve(address(modifyLiquidityRouter), type(uint256).max);
+        MockERC20(Currency.unwrap(currency1)).approve(address(modifyLiquidityRouter), type(uint256).max);
+
+        // Approve the router to spend our tokens
+        MockERC20(Currency.unwrap(currency0)).approve(address(swapRouter), type(uint256).max);
+        MockERC20(Currency.unwrap(currency1)).approve(address(swapRouter), type(uint256).max);
 
         // Calculate hook address with all required flags
         address hookAddress = address(uint160(
@@ -48,8 +83,12 @@ contract AgentHookTest is Test, Deployers {
         // Deploy the hook to an address with the correct flags
         deployCodeTo("AgentHook", abi.encode(manager, HOOK_OWNER), hookAddress);
         hook = AgentHook(hookAddress);
+
     }
 
+/*//////////////////////////////////////////////////////////////
+                           MODIFIERS
+//////////////////////////////////////////////////////////////*/
     modifier withAgent() {
         vm.startPrank(HOOK_OWNER);
         hook.setAuthorizedAgent(AGENT, true);
@@ -71,6 +110,29 @@ contract AgentHookTest is Test, Deployers {
         _;
     }
 
+    modifier withLiquidity() {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        IPoolManager.ModifyLiquidityParams memory params = IPoolManager.ModifyLiquidityParams({
+            tickLower: -120,
+            tickUpper: 120,
+            liquidityDelta: LIQUIDITY_DELTA,
+            salt: 0
+        });
+
+        modifyLiquidityRouter.modifyLiquidity(poolKey, params, ZERO_BYTES);
+        _;
+    }
+
+/*//////////////////////////////////////////////////////////////
+                            BASIC TESTS
+//////////////////////////////////////////////////////////////*/
     function test_InitialState() public view {
         assertEq(hook.s_hookOwner(), HOOK_OWNER);
         assertFalse(hook.isAuthorizedAgent(AGENT));
@@ -200,8 +262,7 @@ contract AgentHookTest is Test, Deployers {
             hooks: IHooks(address(hook))
         });
         
-        uint160 dampedPrice = SQRT_RATIO_1_1 * 2; // Double the current price
-        bool isDamped = true;
+        uint160 dampedPrice = SQRT_RATIO_2_1; // Double the current price
         bool directionZeroForOne = true;
         
         vm.startPrank(AGENT);
@@ -256,7 +317,7 @@ contract AgentHookTest is Test, Deployers {
         vm.stopPrank();
     }
 
-    function test_ResetDampedPool_AsNonOwner() public withAgent withPool {
+    function test_ResetDampedPool_AsNonOwner() public withAgent withPool withLiquidity {
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -267,7 +328,7 @@ contract AgentHookTest is Test, Deployers {
         
         // First set the pool as damped
         vm.prank(AGENT);
-        hook.setDampedPool(poolKey.toId(), SQRT_RATIO_1_1 * 2, true);
+        hook.setDampedPool(poolKey.toId(), SQRT_RATIO_2_1, true);
         
         // Try to reset as non-owner
         vm.startPrank(NON_HOOK_OWNER);
@@ -277,7 +338,105 @@ contract AgentHookTest is Test, Deployers {
         
         // Verify state hasn't changed
         assertTrue(hook.isDampedPool(poolKey.toId()));
-        assertEq(hook.getDampedSqrtPriceX96(poolKey.toId()), SQRT_RATIO_1_1 * 2);
+        assertEq(hook.getDampedSqrtPriceX96(poolKey.toId()), SQRT_RATIO_2_1);
         assertTrue(hook.getCurrentDirectionZeroForOne(poolKey.toId()));
+    }
+
+/*//////////////////////////////////////////////////////////////
+                            SWAP TESTS
+//////////////////////////////////////////////////////////////*/
+    function test_Swap_Undamped() public withPool withLiquidity {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        // Create swap params
+        bool zeroForOne = true;
+        int256 amountSpecified = 1e18; // 1 token0
+        uint160 sqrtPriceLimitX96 = MIN_SQRT_PRICE; // Minimum price limit
+
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: amountSpecified,
+            sqrtPriceLimitX96: sqrtPriceLimitX96
+        });
+
+        uint256 token0balanceBefore = currency0.balanceOfSelf();
+        uint256 token1balanceBefore = currency1.balanceOfSelf();
+
+        // Perform swap
+        PoolSwapTest.TestSettings memory testSettings = 
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+
+        // Calculate expected output using hook's calculation function
+        int128 expectedOutput = hook.calculateSwapReturnSimplifiedAndUndamped(
+            int128(amountSpecified),
+            zeroForOne,
+            SQRT_RATIO_1_1,
+            FEE
+        );
+
+        // Expect event emission
+        vm.expectEmit(true, false, false, false);
+        emit SwapAtPoolPrice(poolKey.toId(), expectedOutput, zeroForOne);
+        swapRouter.swap(poolKey, params, testSettings, "");
+
+        uint256 token0balanceAfter = currency0.balanceOfSelf();
+        uint256 token1balanceAfter = currency1.balanceOfSelf();
+
+        assertEq(token0balanceAfter, token0balanceBefore - uint256(amountSpecified));
+
+        console.log("token0balanceDelta:", token0balanceBefore - token0balanceAfter);
+        console.log("token1balanceDelta", token1balanceAfter - token1balanceBefore);
+
+        // Verify final state
+        // assertEq(hook.getCurrentSqrtPriceX96(poolKey.toId()), SQRT_RATIO_1_1);
+        assertFalse(hook.isDampedPool(poolKey.toId()));
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            HELPER TESTS
+    //////////////////////////////////////////////////////////////*/    
+    
+    function test_WithLiquidity_Modifier() public withPool withLiquidity {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        // Get position info using the correct method with proper destructuring
+        (uint128 liquidity,,) = manager.getPositionInfo(
+            poolKey.toId(),
+            address(modifyLiquidityRouter),
+            -120,
+            120,
+            0
+        );
+        
+        // Cast to uint256 for assertEq
+        assertEq(uint256(liquidity), uint256(uint128(LIQUIDITY_DELTA)));
+
+        // Get pool slot0 data to verify price hasn't changed
+        (uint160 sqrtPriceX96,,,) = manager.getSlot0(poolKey.toId());
+        assertEq(sqrtPriceX96, SQRT_RATIO_1_1);
+
+        // Verify we can swap against this liquidity
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: true,
+            amountSpecified: AMOUNT_SPECIFIED,
+            sqrtPriceLimitX96: MIN_SQRT_PRICE
+        });
+
+        // This should not revert due to having liquidity
+        PoolSwapTest.TestSettings memory testSettings = 
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+        swapRouter.swap(poolKey, params, testSettings, "");
     }
 }
