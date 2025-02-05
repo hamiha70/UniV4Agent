@@ -11,8 +11,14 @@ remappings = [
     "ds-test/=lib/v4-core/lib/forge-std/lib/ds-test/src/",
     "@openzeppelin/=lib/v4-core/lib/openzeppelin-contracts/"
 ]
+
+# Optimization settings
 optimizer = true
-optimizer_runs = 200
+optimizer_runs = 2_000  # Increased from 200 for better gas optimization
+
+# Via IR settings
+via_ir = true  # Enable IR-based codegen
+evm_version = "cancun"  # Specify EVM version for better optimization
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 
@@ -20,6 +26,3 @@ optimizer_runs = 200
 line_length = 120
 tab_width = 4
 bracket_spacing = true
-
-[profile.default.build]
-via_ir = true

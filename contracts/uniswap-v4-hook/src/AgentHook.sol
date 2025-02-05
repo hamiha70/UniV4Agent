@@ -8,11 +8,13 @@ import {PoolId, PoolIdLibrary} from "@uniswap/v4-core/src/types/PoolId.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {BeforeSwapDelta} from "@uniswap/v4-core/src/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "@uniswap/v4-core/src/types/Currency.sol";
+import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 import {BalanceDelta} from "@uniswap/v4-core/src/types/BalanceDelta.sol";
 import {StateLibrary} from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
-
+import {console2} from "forge-std/console2.sol";
 
 contract AgentHook is BaseHook {
+    using CurrencySettler for Currency;
     using CurrencyLibrary for Currency;
     using PoolIdLibrary for PoolKey;
 
@@ -91,68 +93,96 @@ contract AgentHook is BaseHook {
         bytes calldata
     ) external override returns (bytes4, int128) {
         // Extract the delta from the swap
-        int128 hookDeltaUnspecified = params.zeroForOne ? delta.amount1() : delta.amount0();
-        Currency currency = params.zeroForOne ? key.currency1 : key.currency0;
+        (, Currency unspecifiedCurrency) = _sortCurrencies(key, params);
+        int128 hookDeltaUnspecified = params.zeroForOne ? delta.amount0() : delta.amount1();
+        /*//////////////////////////////////////////////////////////////
+                           LOGGING FOR TESTING
+        //////////////////////////////////////////////////////////////*/
+        logPoolKey(key);
+        console2.log("=== SWAP REQUEST ===");
+        console2.log("Swap direction (zeroForOne):", params.zeroForOne);
+        logInt256("Amount specified", params.amountSpecified);
+        logUint160("sqrtPriceLimitX96", params.sqrtPriceLimitX96);
+        console2.log("=== SWAP START ===");
+        logInt128("Delta amount0", delta.amount0());
+        logInt128("Delta amount1", delta.amount1());
+        logInt128("Hook delta unspecified", hookDeltaUnspecified);
+        console2.log("Specified currency index:", _nameSpecifiedCurrency(params));
+        /*//////////////////////////////////////////////////////////////
+                           END LOGGING FOR TESTING
+        //////////////////////////////////////////////////////////////*/
 
-        // If pool is not damped or wrong direction, let PoolManager handle everything
+        // If pool is not damped or wrong direction, return 0 delta (no hook action)
         if (!s_isDampedPool[key.toId()] || !s_directionZeroForOne[key.toId()]) {
-            // Emit event that swap is happening at the pool's current price
+            console2.log("=== UNDAMPED SWAP ===");
             emit SwapAtPoolPrice(key.toId(), hookDeltaUnspecified, params.zeroForOne);
             return (this.afterSwap.selector, 0);
         }
 
+        console2.log("=== DAMPED SWAP ===");
         // For damped pools, calculate the split between hook and swapper
         int128 hookTokenOut;
         int128 swapperTokenOut;
         uint160 dampedSqrtPriceX96 = getDampedSqrtPriceX96(key.toId());
         uint160 poolSqrtPriceX96 = calculatePoolSqrtPriceX96FromBalanceDeltaAndSwapParams(params, delta);
 
+        console2.log("Damped sqrt price:", dampedSqrtPriceX96);
+        console2.log("Pool sqrt price:", poolSqrtPriceX96);
+
         // Calculate splits based on direction
         if (params.zeroForOne) {
             if (poolSqrtPriceX96 <= dampedSqrtPriceX96) {
-                // token0 -> token1: price = dampedSqrtPriceX96 / poolSqrtPriceX96
+                console2.log("=== REVERTING: POOL PRICE TOO LOW === Damped price below pool price for zeroForOne swap ===");
                 revert AgentHook_DampedPoolPriceTooHigh(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96);
             }
-            swapperTokenOut = int128(int256(
-                (uint256(uint128(hookDeltaUnspecified >= 0 ? hookDeltaUnspecified : -hookDeltaUnspecified)) * 
-                uint256(dampedSqrtPriceX96) / uint256(poolSqrtPriceX96) * 
-                uint256(dampedSqrtPriceX96) / uint256(poolSqrtPriceX96))
-            ));
+            swapperTokenOut = hookDeltaUnspecified * 
+                int128(int256((uint256(poolSqrtPriceX96) * uint256(poolSqrtPriceX96)) / 
+                             (uint256(dampedSqrtPriceX96) * uint256(dampedSqrtPriceX96))));
             hookTokenOut = hookDeltaUnspecified - swapperTokenOut;
-            if (hookTokenOut < 0) {
+            if (hookTokenOut > 0) {
+                console2.log("=== REVERTING: HOOK TOKEN OUT POSITIVE ===");
                 revert AgentHook_SwapAmountTooLarge(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96, hookTokenOut, swapperTokenOut);
             }
         }
 
         if (!params.zeroForOne) {
             if (poolSqrtPriceX96 > dampedSqrtPriceX96) {
+                console2.log("=== REVERTING: POOL PRICE TOO HIGH === Damped price above pool price for oneForZero swap ===");
                 revert AgentHook_DampedPoolPriceTooLow(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96);
             }
-            swapperTokenOut = int128(int256(
-                (uint256(uint128(hookDeltaUnspecified >= 0 ? hookDeltaUnspecified : -hookDeltaUnspecified)) * 
-                uint256(poolSqrtPriceX96) / uint256(dampedSqrtPriceX96) * 
-                uint256(poolSqrtPriceX96) / uint256(dampedSqrtPriceX96))
-            ));
+            swapperTokenOut = hookDeltaUnspecified * 
+                int128(int256((uint256(dampedSqrtPriceX96) * uint256(dampedSqrtPriceX96)) / 
+                             (uint256(poolSqrtPriceX96) * uint256(poolSqrtPriceX96))));
             hookTokenOut = hookDeltaUnspecified - swapperTokenOut;
-            if (hookTokenOut < 0) {
+            if (hookTokenOut > 0) {
+                console2.log("=== REVERTING: HOOK TOKEN OUT POSITIVE ===");
                 revert AgentHook_SwapAmountTooLarge(key.toId(), poolSqrtPriceX96, dampedSqrtPriceX96, hookTokenOut, swapperTokenOut);
             }
         }
 
-        // Emit event for damped swap
+        /*//////////////////////////////////////////////////////////////
+                           LOGGING FOR TESTING
+        //////////////////////////////////////////////////////////////*/
+        console2.log("=== CALCULATED SPLITS ===");
+        logInt128("Calculated swapper token out", swapperTokenOut);
+        logInt128("Calculated hook token out", hookTokenOut);
+        /*//////////////////////////////////////////////////////////////
+                           END LOGGING FOR TESTING
+        //////////////////////////////////////////////////////////////*/
+        
+        logBalances("Before taking tokens:", unspecifiedCurrency);
+
+        // Take hook's portion using _settleOrTake
+        _settleOrTake(unspecifiedCurrency, hookTokenOut);
+
+        // After taking hook's portion
+        console2.log("Pool balance after take:", unspecifiedCurrency.balanceOf(address(poolManager)));
+        console2.log("=== SWAP END ===");
+        
         emit SwapAtDampedPrice(key.toId(), swapperTokenOut, hookTokenOut, dampedSqrtPriceX96, poolSqrtPriceX96);
 
-        // Take hook's portion
-        if (hookTokenOut > 0) {
-            poolManager.take(
-                currency,
-                address(this),
-                uint256(int256(hookTokenOut))
-            );
-        }
-
-        // Return swapper's portion for PoolManager to handle
-        return (this.afterSwap.selector, swapperTokenOut);
+        // Return the hook's portion as delta (what we handled)
+        return (this.afterSwap.selector, hookTokenOut);
     }
 
 /*//////////////////////////////////////////////////////////////
@@ -241,6 +271,26 @@ contract AgentHook is BaseHook {
                            INTERNAL FUNCTIONS
 //////////////////////////////////////////////////////////////*/
 
+    function _sortCurrencies(PoolKey calldata key, IPoolManager.SwapParams calldata params)
+        internal
+        pure
+        returns (Currency specified, Currency unspecified)
+    {
+        (specified, unspecified) = (params.zeroForOne == (params.amountSpecified < 0))
+            ? (key.currency0, key.currency1)
+            : (key.currency1, key.currency0);
+    }
+
+
+    function _settleOrTake(Currency currency, int128 delta) internal {
+        // negative amount means hook should take tokens
+        // positive means hook should settle tokens
+        if (delta < 0) {
+            currency.take(poolManager, address(this), uint128(-delta), false);
+        } else {
+            currency.settle(poolManager, address(this), uint128(delta), false);
+        }
+    }
 
 /*//////////////////////////////////////////////////////////////
                            GETTERS
@@ -344,4 +394,73 @@ contract AgentHook is BaseHook {
     event PoolRegistered(PoolKey key);
     event SwapAtPoolPrice(PoolId indexed id, int128 swapperTokenOut, bool zeroForOne);
     event SwapAtDampedPrice(PoolId indexed id, int128 swapperTokenOut, int128 hookTokenOut, uint160 dampedSqrtPriceX96, uint160 poolSqrtPriceX96);
+
+
+/*//////////////////////////////////////////////////////////////
+                           UTILITIES FOR TESTING - REMOVE FOR PRODUCTION
+//////////////////////////////////////////////////////////////*/
+
+    function logInt128(string memory label, int128 value) internal pure {
+        string memory source = "Hook - ";
+        if (value < 0) {
+            console2.log(source, label, "(-)", uint256(uint128(-value)));
+        } else {
+            console2.log(source, label, "(+)", uint256(uint128(value)));
+        }
+    }
+
+    function logInt256(string memory label, int256 value) internal pure {
+        string memory source = "Hook - ";
+        if (value < 0) {
+            console2.log(source, label, "(-)", uint256(-value));
+        } else {
+            console2.log(source, label, "(+)", uint256(value));
+        }
+    }
+
+    function logUint160(string memory label, uint160 value) internal pure {
+        string memory source = "Hook - ";
+        console2.log(source, label, value);
+    }
+
+    function logInt24(string memory label, int24 value) internal pure {
+        string memory source = "Hook - ";
+        if (value < 0) {
+            console2.log(source, label, "(-)", uint256(uint24(-value)));
+        } else {
+            console2.log(source, label, "(+)", uint256(uint24(value)));
+        }
+    }
+
+    function logBalances(string memory label, Currency currency) internal view {
+        string memory source = "Hook - ";
+        console2.log(source, label);
+        console2.log(source, "  Pool balance:", currency.balanceOf(address(poolManager)));
+        console2.log(source, "  Hook balance:", currency.balanceOf(address(this)));
+        console2.log(source, "  Test contract balance:", currency.balanceOf(address(this)));
+    }
+
+    function logPoolKey(PoolKey memory key) internal pure {
+        string memory source = "Hook - ";
+        console2.log(source, "Pool key:");
+        console2.log(source, "  currency0:", Currency.unwrap(key.currency0));
+        console2.log(source, "  currency1:", Currency.unwrap(key.currency1));
+        console2.log(source, "  fee:", key.fee);
+    }
+
+    function logSwapParams(IPoolManager.SwapParams memory params) internal pure {
+        string memory source = "Hook - ";
+        console2.log(source, "Swap params:");
+        console2.log(source, "  zeroForOne:", params.zeroForOne);
+        logInt256(string.concat(source, "  amountSpecified:"), params.amountSpecified);
+        logUint160(string.concat(source, "  sqrtPriceLimitX96:"), params.sqrtPriceLimitX96);
+    }
+
+    function _nameSpecifiedCurrency(IPoolManager.SwapParams calldata params) internal pure returns (uint256 specifiedCurrencyIndex) {
+        if (params.zeroForOne == (params.amountSpecified > 0)) {
+            specifiedCurrencyIndex = 0;
+        } else {
+            specifiedCurrencyIndex = 1;
+        }
+    }
 }

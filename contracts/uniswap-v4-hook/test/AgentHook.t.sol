@@ -83,7 +83,6 @@ contract AgentHookTest is Test, Deployers {
         // Deploy the hook to an address with the correct flags
         deployCodeTo("AgentHook", abi.encode(manager, HOOK_OWNER), hookAddress);
         hook = AgentHook(hookAddress);
-
     }
 
 /*//////////////////////////////////////////////////////////////
@@ -356,25 +355,24 @@ contract AgentHookTest is Test, Deployers {
 
         // Create swap params
         bool zeroForOne = true;
-        int256 amountSpecified = 1e18; // 1 token0
         uint160 sqrtPriceLimitX96 = MIN_SQRT_PRICE; // Minimum price limit
 
         IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
             zeroForOne: zeroForOne,
-            amountSpecified: amountSpecified,
+            amountSpecified: AMOUNT_SPECIFIED,
             sqrtPriceLimitX96: sqrtPriceLimitX96
         });
 
         uint256 token0balanceBefore = currency0.balanceOfSelf();
         uint256 token1balanceBefore = currency1.balanceOfSelf();
 
-        // Perform swap
+        // Prepare swap settings
         PoolSwapTest.TestSettings memory testSettings = 
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
         // Calculate expected output using hook's calculation function
         int128 expectedOutput = hook.calculateSwapReturnSimplifiedAndUndamped(
-            int128(amountSpecified),
+            AMOUNT_SPECIFIED,
             zeroForOne,
             SQRT_RATIO_1_1,
             FEE
@@ -383,12 +381,13 @@ contract AgentHookTest is Test, Deployers {
         // Expect event emission
         vm.expectEmit(true, false, false, false);
         emit SwapAtPoolPrice(poolKey.toId(), expectedOutput, zeroForOne);
+        // Perform swap
         swapRouter.swap(poolKey, params, testSettings, "");
 
         uint256 token0balanceAfter = currency0.balanceOfSelf();
         uint256 token1balanceAfter = currency1.balanceOfSelf();
 
-        assertApproxEqRel(token0balanceAfter, token0balanceBefore - uint256(amountSpecified), 1e12); // 0.0001
+        assertApproxEqRel(token0balanceAfter, token0balanceBefore - uint256(uint128(AMOUNT_SPECIFIED)), 1e12); // 0.0001
         assertApproxEqRel(token1balanceAfter, token1balanceBefore + uint256(uint128(expectedOutput)), 1e16); // 1% tolerance
 
         console.log("token0balanceDelta:", token0balanceBefore - token0balanceAfter);
@@ -396,6 +395,111 @@ contract AgentHookTest is Test, Deployers {
 
         // Verify final state
         assertFalse(hook.isDampedPool(poolKey.toId()));
+    }
+
+    function test_Swap_Damped() public withAgent withPool withLiquidity {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        // Set up damped pool with price LOWER than current price for zeroForOne swap
+        // Current price is SQRT_RATIO_1_1, so we'll use SQRT_RATIO_1_2 (half the price)
+        vm.prank(AGENT);
+        hook.setDampedPool(poolKey.toId(), SQRT_RATIO_1_2, true);
+
+        // Create swap params (same as undamped case)
+        bool zeroForOne = true;
+        uint160 sqrtPriceLimitX96 = MIN_SQRT_PRICE;
+
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: AMOUNT_SPECIFIED,
+            sqrtPriceLimitX96: sqrtPriceLimitX96
+        });
+
+        uint256 token0balanceBefore = currency0.balanceOfSelf();
+        uint256 token1balanceBefore = currency1.balanceOfSelf();
+        uint256 hookToken0balanceBefore = currency0.balanceOf(address(hook));
+        uint256 hookToken1balanceBefore = currency1.balanceOf(address(hook));
+
+        // console.log("Test contract - Before swap - token0 balance:", token0balanceBefore);
+        // console.log("Test contract - Before swap - token1 balance:", token1balanceBefore);
+        // console.log("Test contract - Before swap - hook token0 balance:", hookToken0balanceBefore);
+        // console.log("Test contract - Before swap - hook token1 balance:", hookToken1balanceBefore);
+
+        // Prepare swap settings
+        PoolSwapTest.TestSettings memory testSettings = 
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+
+        // Calculate total output using hook's calculation function
+        int128 totalOutput = hook.calculateSwapReturnSimplifiedAndUndamped(
+            AMOUNT_SPECIFIED,
+            zeroForOne,
+            SQRT_RATIO_1_1,
+            FEE
+        );
+
+        // Calculate expected output using hook's calculation function
+        int128 expectedOutputSwappper = hook.calculateSwapReturnSimplified(
+            poolKey.toId(),
+            zeroForOne,
+            AMOUNT_SPECIFIED
+        );
+
+        // Calculate expected output using hook's calculation function
+        int128 expectedOutputHook = totalOutput - expectedOutputSwappper;
+
+        // Expect event emission
+        vm.expectEmit(true, false, false, false);
+        emit SwapAtDampedPrice(poolKey.toId(), expectedOutputSwappper, expectedOutputHook, SQRT_RATIO_1_2, SQRT_RATIO_1_1);
+        
+        // Perform swap
+        swapRouter.swap(poolKey, params, testSettings, "");
+
+        uint256 token0balanceAfter = currency0.balanceOfSelf();
+        uint256 token1balanceAfter = currency1.balanceOfSelf();
+        uint256 hookToken0balanceAfter = currency0.balanceOf(address(hook));
+        uint256 hookToken1balanceAfter = currency1.balanceOf(address(hook));
+
+        // console.log("After swap - token0 balance:", token0balanceAfter);
+        // console.log("After swap - token1 balance:", token1balanceAfter);
+        // console.log("After swap - hook token0 balance:", hookToken0balanceAfter);
+        // console.log("After swap - hook token1 balance:", hookToken1balanceAfter);
+
+        logBalanceAfterMinusBalanceBefore("Test contract - After swap - token0 balance delta:", token0balanceAfter, token0balanceBefore);
+        logBalanceAfterMinusBalanceBefore("Test contract - After swap - token1 balance delta:", token1balanceAfter, token1balanceBefore);
+        logBalanceAfterMinusBalanceBefore("Test contract - After swap - hook token0 balance delta:", hookToken0balanceAfter, hookToken0balanceBefore);
+        logBalanceAfterMinusBalanceBefore("Test contract - After swap - hook token1 balance delta:", hookToken1balanceAfter, hookToken1balanceBefore);
+
+        // Verify token0 (input) was taken correctly
+        assertApproxEqRel(token0balanceAfter, token0balanceBefore - uint256(uint128(AMOUNT_SPECIFIED)), 1e12);
+        console.log("Test contract - After swap - token0 balance delta:", token0balanceAfter - token0balanceBefore);
+
+        // Verify hook received token1 (unspecified/output token)
+        assertEq(hookToken0balanceAfter, hookToken0balanceBefore);
+        console.log("Test contract - After swap - hook token0 balance delta:", hookToken0balanceAfter - hookToken0balanceBefore);
+        assertTrue(hookToken1balanceAfter > hookToken1balanceBefore);
+        console.log("Test contract - After swap - hook token1 balance delta:", hookToken1balanceAfter - hookToken1balanceBefore);
+        assertApproxEqRel(hookToken1balanceAfter, hookToken1balanceBefore + uint256(uint128(expectedOutputHook)), 1e16);
+        console.log("Test contract - After swap - hook token1 balance delta:", hookToken1balanceAfter - hookToken1balanceBefore);
+
+        // Verify swapper received token1
+        assertTrue(token1balanceAfter > token1balanceBefore);
+        console.log("Test contract - After swap - token1 balance delta:", token1balanceAfter - token1balanceBefore);
+        assertApproxEqRel(token1balanceAfter, token1balanceBefore + uint256(uint128(expectedOutputSwappper)), 1e16);
+        console.log("Test contract - After swap - token1 balance delta:", token1balanceAfter - token1balanceBefore);
+
+        // Verify final state
+        assertTrue(hook.isDampedPool(poolKey.toId()));
+        console.log("Test contract - After swap - damped pool:", hook.isDampedPool(poolKey.toId()));
+        assertEq(hook.getDampedSqrtPriceX96(poolKey.toId()), SQRT_RATIO_1_2);
+        console.log("Test contract - After swap - damped price:", hook.getDampedSqrtPriceX96(poolKey.toId()));
+        assertTrue(hook.getCurrentDirectionZeroForOne(poolKey.toId()));
+        console.log("Test contract - After swap - current direction zero for one:", hook.getCurrentDirectionZeroForOne(poolKey.toId()));
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -438,5 +542,18 @@ contract AgentHookTest is Test, Deployers {
         PoolSwapTest.TestSettings memory testSettings = 
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
         swapRouter.swap(poolKey, params, testSettings, "");
+    }
+    /*//////////////////////////////////////////////////////////////    
+                            HELPER FUNCTIONS
+    //////////////////////////////////////////////////////////////*/    
+
+    function logBalanceAfterMinusBalanceBefore(string memory label, uint256 balanceAfter, uint256 balanceBefore) internal pure {
+        string memory source = "Test contract - ";
+
+        if (balanceAfter - balanceBefore > 0) {
+            console.log(source, label, "(+)", balanceAfter - balanceBefore);
+        } else {
+            console.log(source, label, "(-)", balanceAfter - balanceBefore);
+        }
     }
 }
