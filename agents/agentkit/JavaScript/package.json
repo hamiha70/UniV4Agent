@@ -1,0 +1,28 @@
+{
+  "name": "eth-price-agent",
+  "version": "1.0.0",
+  "description": "AI agent to compute ETH/USD moving average",
+  "main": "src/agent.js",
+  "scripts": {
+    "start": "node src/test-agent.js",
+    "server": "node src/server.js",
+    "dev": "concurrently \"npm run start\" \"npm run server\""
+  },
+  "dependencies": {
+    "@coinbase/agentkit": "^0.1.1",
+    "@coinbase/cdp-langchain": "^0.0.15",
+    "@langchain/core": "^0.3.37",
+    "@langchain/openai": "^0.4.2",
+    "@lit-protocol/sdk-nodejs": "^1.1.250",
+    "axios": "^1.7.9",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "viem": "^2.22.17",
+    "web3": "^1.10.4"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
