@@ -26,6 +26,7 @@ contract HelperConfig is Script {
         address liquidityProviderAddress;
         uint256 liquidityProviderPrivateKey;
         address USDCAddress;
+        address LINKAddress;
     }
 
     constructor() {
@@ -52,7 +53,8 @@ contract HelperConfig is Script {
             swapperPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
             liquidityProviderAddress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"),
             liquidityProviderPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
-            USDCAddress: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
+            USDCAddress: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238,
+            LINKAddress: 0x779877A7B0D9E8603169DdbD7836e478b4624789 // Note: LINK CANNOT be minted on Sepolia Mainnet
         });
     }
 
@@ -62,6 +64,7 @@ contract HelperConfig is Script {
         config.poolSwapTestAddress = 0x8B5bcC363ddE2614281aD875bad385E0A785D3B9;
         config.poolModifyLiquidityTestAddress = 0x37429cD17Cb1454C34E7F50b09725202Fd533039;
         config.USDCAddress = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
+        config.LINKAddress =0xE4aB69C077896252FAFBD49EFD26B5D171A32410; // Note: LINK CAN be minted on Base Sepolia
         return config;
     }
 }
