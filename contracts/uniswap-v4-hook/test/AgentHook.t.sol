@@ -30,6 +30,7 @@ contract AgentHookTest is Test, Deployers {
     uint160 constant SQRT_RATIO_2_1 = 112807967156250000000000000000; // 2:1 price
     uint160 constant SQRT_RATIO_1_2 = 56403983578125000000000000000; // 1:2 price
     uint160 constant MIN_SQRT_PRICE = TickMath.MIN_SQRT_PRICE + 1;
+    uint160 constant MAX_SQRT_PRICE = TickMath.MAX_SQRT_PRICE - 1;
     uint24 constant FEE = 3000;
     int24 constant TICK_SPACING = 60;
     int128 constant LIQUIDITY_DELTA = 10 * 1e18;
@@ -344,7 +345,7 @@ contract AgentHookTest is Test, Deployers {
 /*//////////////////////////////////////////////////////////////
                             SWAP TESTS
 //////////////////////////////////////////////////////////////*/
-    function test_Swap_Undamped() public withPool withLiquidity {
+    function test_Swap_Undamped_ZeroForOne() public withPool withLiquidity {
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -371,11 +372,9 @@ contract AgentHookTest is Test, Deployers {
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
         // Calculate expected output using hook's calculation function
-        int128 expectedOutput = hook.calculateSwapReturnSimplifiedAndUndamped(
+        int128 expectedOutput = hook.calculateSwapReturnSimplified_Undamped(
             AMOUNT_SPECIFIED,
-            zeroForOne,
-            SQRT_RATIO_1_1,
-            FEE
+            poolKey
         );
 
         // Expect event emission
@@ -397,7 +396,7 @@ contract AgentHookTest is Test, Deployers {
         assertFalse(hook.isDampedPool(poolKey.toId()));
     }
 
-    function test_Swap_Damped() public withAgent withPool withLiquidity {
+    function test_Swap_Damped_ZeroForOne() public withAgent withPool withLiquidity {
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -436,18 +435,15 @@ contract AgentHookTest is Test, Deployers {
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
 
         // Calculate total output using hook's calculation function
-        int128 totalOutput = hook.calculateSwapReturnSimplifiedAndUndamped(
-            AMOUNT_SPECIFIED,
-            zeroForOne,
-            SQRT_RATIO_1_1,
-            FEE
+        int128 totalOutput = hook.calculateSwapReturnSimplified_PotentiallyDamped(
+            poolKey,
+            AMOUNT_SPECIFIED
         );
 
         // Calculate expected output using hook's calculation function
-        int128 expectedOutputSwappper = hook.calculateSwapReturnSimplified(
-            poolKey.toId(),
-            zeroForOne,
-            AMOUNT_SPECIFIED
+        int128 expectedOutputSwappper = hook.calculateSwapReturnSimplified_Undamped(
+            AMOUNT_SPECIFIED,
+            poolKey
         );
 
         // Calculate expected output using hook's calculation function
@@ -500,6 +496,142 @@ contract AgentHookTest is Test, Deployers {
         console.log("Test contract - After swap - damped price:", hook.getDampedSqrtPriceX96(poolKey.toId()));
         assertTrue(hook.getCurrentDirectionZeroForOne(poolKey.toId()));
         console.log("Test contract - After swap - current direction zero for one:", hook.getCurrentDirectionZeroForOne(poolKey.toId()));
+    }
+
+    function test_Swap_Undamped_OneForZero() public withPool withLiquidity {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        // Create swap params with zeroForOne = false
+        bool zeroForOne = false;
+        uint160 sqrtPriceLimitX96 = MAX_SQRT_PRICE; // Maximum price limit for OneForZero
+
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: AMOUNT_SPECIFIED,
+            sqrtPriceLimitX96: sqrtPriceLimitX96
+        });
+
+        uint256 token0balanceBefore = currency0.balanceOfSelf();
+        uint256 token1balanceBefore = currency1.balanceOfSelf();
+
+        // Prepare swap settings
+        PoolSwapTest.TestSettings memory testSettings = 
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+
+        // Calculate expected output using hook's calculation function
+        int128 expectedOutput = hook.calculateSwapReturnSimplified_Undamped(
+            AMOUNT_SPECIFIED,
+            poolKey
+        );
+
+        // Expect event emission
+        vm.expectEmit(true, false, false, false);
+        emit SwapAtPoolPrice(poolKey.toId(), expectedOutput, zeroForOne);
+        
+        // Perform swap
+        swapRouter.swap(poolKey, params, testSettings, "");
+
+        uint256 token0balanceAfter = currency0.balanceOfSelf();
+        uint256 token1balanceAfter = currency1.balanceOfSelf();
+
+        // For OneForZero, we give token1 and receive token0
+        assertApproxEqRel(token1balanceAfter, token1balanceBefore - uint256(uint128(AMOUNT_SPECIFIED)), 1e12);
+        assertApproxEqRel(token0balanceAfter, token0balanceBefore + uint256(uint128(expectedOutput)), 1e16);
+
+        console.log("token1balanceDelta:", token1balanceBefore - token1balanceAfter);
+        console.log("token0balanceDelta", token0balanceAfter - token0balanceBefore);
+
+        // Verify final state
+        assertFalse(hook.isDampedPool(poolKey.toId()));
+    }
+
+    function test_Swap_Damped_OneForZero() public withAgent withPool withLiquidity {
+        PoolKey memory poolKey = PoolKey({
+            currency0: currency0,
+            currency1: currency1,
+            fee: FEE,
+            tickSpacing: TICK_SPACING,
+            hooks: IHooks(address(hook))
+        });
+
+        // Set up damped pool with price HIGHER than current price for oneForZero swap
+        // Current price is SQRT_RATIO_1_1, so we'll use SQRT_RATIO_2_1 (double the price)
+        vm.prank(AGENT);
+        hook.setDampedPool(poolKey.toId(), SQRT_RATIO_2_1, false);  // Note: false for oneForZero
+
+        // Create swap params
+        bool zeroForOne = false;
+        uint160 sqrtPriceLimitX96 = MAX_SQRT_PRICE;
+
+        IPoolManager.SwapParams memory params = IPoolManager.SwapParams({
+            zeroForOne: zeroForOne,
+            amountSpecified: AMOUNT_SPECIFIED,
+            sqrtPriceLimitX96: sqrtPriceLimitX96
+        });
+
+        uint256 token0balanceBefore = currency0.balanceOfSelf();
+        uint256 token1balanceBefore = currency1.balanceOfSelf();
+        uint256 hookToken0balanceBefore = currency0.balanceOf(address(hook));
+        uint256 hookToken1balanceBefore = currency1.balanceOf(address(hook));
+
+        // Prepare swap settings
+        PoolSwapTest.TestSettings memory testSettings = 
+            PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false});
+
+        // Calculate total output using hook's calculation function
+        int128 totalOutput = hook.calculateSwapReturnSimplified_PotentiallyDamped(
+            poolKey,
+            AMOUNT_SPECIFIED
+        );
+
+        // Calculate expected outputs
+        int128 expectedOutputSwapper = hook.calculateSwapReturnSimplified_Undamped(
+            AMOUNT_SPECIFIED,
+            poolKey
+        );
+
+        int128 expectedOutputHook = totalOutput - expectedOutputSwapper;
+
+        // Expect event emission
+        vm.expectEmit(true, false, false, false);
+        emit SwapAtDampedPrice(poolKey.toId(), expectedOutputSwapper, expectedOutputHook, SQRT_RATIO_2_1, SQRT_RATIO_1_1);
+        
+        // Perform swap
+        swapRouter.swap(poolKey, params, testSettings, "");
+
+        uint256 token0balanceAfter = currency0.balanceOfSelf();
+        uint256 token1balanceAfter = currency1.balanceOfSelf();
+        uint256 hookToken0balanceAfter = currency0.balanceOf(address(hook));
+        uint256 hookToken1balanceAfter = currency1.balanceOf(address(hook));
+
+        // Log all balance changes
+        logBalanceAfterMinusBalanceBefore("After swap - token0 balance delta:", token0balanceAfter, token0balanceBefore);
+        logBalanceAfterMinusBalanceBefore("After swap - token1 balance delta:", token1balanceAfter, token1balanceBefore);
+        logBalanceAfterMinusBalanceBefore("After swap - hook token0 balance delta:", hookToken0balanceAfter, hookToken0balanceBefore);
+        logBalanceAfterMinusBalanceBefore("After swap - hook token1 balance delta:", hookToken1balanceAfter, hookToken1balanceBefore);
+
+        // Verify token1 (input) was taken correctly
+        assertApproxEqRel(token1balanceAfter, token1balanceBefore - uint256(uint128(AMOUNT_SPECIFIED)), 1e12);
+
+        // Verify hook received token0 (unspecified/output token)
+        assertEq(hookToken1balanceAfter, hookToken1balanceBefore);
+        assertTrue(hookToken0balanceAfter > hookToken0balanceBefore);
+        assertApproxEqRel(hookToken0balanceAfter, hookToken0balanceBefore + uint256(uint128(expectedOutputHook)), 1e16);
+
+        // Verify swapper received token0
+        assertTrue(token0balanceAfter > token0balanceBefore);
+        assertApproxEqRel(token0balanceAfter, token0balanceBefore + uint256(uint128(expectedOutputSwapper)), 1e16);
+
+        // Verify final state
+        assertTrue(hook.isDampedPool(poolKey.toId()));
+        assertEq(hook.getDampedSqrtPriceX96(poolKey.toId()), SQRT_RATIO_2_1);
+        assertFalse(hook.getCurrentDirectionZeroForOne(poolKey.toId()));
     }
 
     /*//////////////////////////////////////////////////////////////
