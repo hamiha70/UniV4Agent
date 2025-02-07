@@ -370,7 +370,7 @@ contract AgentHook is BaseHook {
         s_hookOwner = newHookOwner;
     }
 
-    function resetDampedPool(PoolId id) public onlyHookOwner {
+    function resetDampedPool(PoolId id) public onlyAuthorizedAgent {
         emit DampedPoolReset(id);
         s_isDampedPool[id] = false;
         s_dampedSqrtPriceX96[id] = 0;

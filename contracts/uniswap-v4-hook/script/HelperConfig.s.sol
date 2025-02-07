@@ -14,8 +14,8 @@ contract HelperConfig is Script {
 
     struct NetworkConfig {
         address poolManagerAddress;
-        address hookOwnerAddress;
-        uint256 hookOwnerPrivateKey;
+        address hookOwnerAndDeployerAddress;
+        uint256 hookOwnerAndDeployerPrivateKey;
         address poolSwapTestAddress;
         address poolModifyLiquidityTestAddress;
         address create2DeployerAddress;
@@ -42,8 +42,8 @@ contract HelperConfig is Script {
     function getSepoliaEthConfig() public view returns (NetworkConfig memory) {
         return NetworkConfig({
             poolManagerAddress: 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543,
-            hookOwnerAddress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"), 
-            hookOwnerPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
+            hookOwnerAndDeployerAddress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"), 
+            hookOwnerAndDeployerPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
             poolSwapTestAddress: 0x9B6b46e2c869aa39918Db7f52f5557FE577B6eEe,
             poolModifyLiquidityTestAddress: 0x0C478023803a644c94c4CE1C1e7b9A087e411B0A,
             create2DeployerAddress: vm.envAddress("CREATE2_DEPLOYER_ADDRESS"),
