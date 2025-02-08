@@ -330,7 +330,7 @@ contract AgentHookTest is Test, Deployers {
         vm.prank(AGENT);
         hook.setDampedPool(poolKey.toId(), SQRT_RATIO_2_1, true);
         
-        // Try to reset as non-owner
+        // Try to reset as non-owner/swap
         vm.startPrank(NON_HOOK_OWNER);
         vm.expectRevert(AgentHook.AgentHook_NotHookOwner.selector);
         hook.resetDampedPool(poolKey.toId());
@@ -389,8 +389,8 @@ contract AgentHookTest is Test, Deployers {
         assertApproxEqRel(token0balanceAfter, token0balanceBefore - uint256(uint128(AMOUNT_SPECIFIED)), 1e12); // 0.0001
         assertApproxEqRel(token1balanceAfter, token1balanceBefore + uint256(uint128(expectedOutput)), 1e16); // 1% tolerance
 
-        console.log("token0balanceDelta:", token0balanceBefore - token0balanceAfter);
-        console.log("token1balanceDelta", token1balanceAfter - token1balanceBefore);
+        logBalanceAfterMinusBalanceBefore("token0balanceDelta:", token0balanceAfter, token0balanceBefore);
+        logBalanceAfterMinusBalanceBefore("token1balanceDelta", token1balanceAfter, token1balanceBefore);
 
         // Verify final state
         assertFalse(hook.isDampedPool(poolKey.toId()));
@@ -544,8 +544,8 @@ contract AgentHookTest is Test, Deployers {
         assertApproxEqRel(token1balanceAfter, token1balanceBefore - uint256(uint128(AMOUNT_SPECIFIED)), 1e12);
         assertApproxEqRel(token0balanceAfter, token0balanceBefore + uint256(uint128(expectedOutput)), 1e16);
 
-        console.log("token1balanceDelta:", token1balanceBefore - token1balanceAfter);
-        console.log("token0balanceDelta", token0balanceAfter - token0balanceBefore);
+        logBalanceAfterMinusBalanceBefore("token1balanceDelta:", token1balanceAfter, token1balanceBefore);
+        logBalanceAfterMinusBalanceBefore("token0balanceDelta", token0balanceAfter, token0balanceBefore);
 
         // Verify final state
         assertFalse(hook.isDampedPool(poolKey.toId()));

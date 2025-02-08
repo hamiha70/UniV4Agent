@@ -17,6 +17,7 @@ contract DeployHook is Script {
     function run() external returns (AgentHook agentHook, MockERC20 mockUSDC, MockERC20 mockLINK,  HelperConfig helperConfig) {
         helperConfig = new HelperConfig();
         (address poolManagerAddress,
+        /*address hookAddress*/,
         address hookOwnerAndDeployerAddress,
         uint256 hookOwnerAndDeployerPrivateKey,
         /*address poolSwapTestAddress*/, 

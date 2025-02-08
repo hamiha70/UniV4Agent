@@ -13,11 +13,10 @@ clean  :; forge clean
 remove :; rm -rf .gitmodules && rm -rf .git/modules/* && rm -rf lib && touch .gitmodules && git add . && git commit -m "modules"
 
 install :; forge install \
-    frin/foundry-devops@0.2.2 --no-commit && \
-    forge install smartcontractkit/chainlink-brownie-contracts@1.1.1 --no-commit && \
+    cyfrin/foundry-devops@0.2.2 --no-commit && \
     forge install foundry-rs/forge-std@v1.8.2 --no-commit && \
-    forge install uniswap/v4-core@1.0.2 --no-commit && \
-    forge install uniswap/v4-periphery@1.0.0 --no-commit
+    forge install uniswap/v4-core@main --no-commit && \
+    forge install uniswap/v4-periphery@main --no-commit
 
 # Update Dependencies
 update:; forge update
@@ -62,8 +61,8 @@ verify-base-sepolia-contract:
 	src/AgentHook.sol:AgentHook
 
 fork-deploy-sepolia-mainnet:
-	@forge script script/DeployHook.s.sol:DeployHook --fork-url $(ETHEREUM_SEPOLIA_RPC_URL) --private-key $(SEPOLIA_ACCOUNT_PRIVATE_KEY_1) --fork
+	@forge script script/DeployHook.s.sol:DeployHook --fork-url $(ETHEREUM_SEPOLIA_RPC_URL) --private-key $(SEPOLIA_ACCOUNT_PRIVATE_KEY_1) -vvvv
 
 
 fork-deploy-sepolia-base:
-	@forge script script/DeployHook.s.sol:DeployHook --fork-url $(BASE_SEPOLIA_RPC_URL) --private-key $(SEPOLIA_ACCOUNT_PRIVATE_KEY_1) --fork
+	@forge script script/DeployHook.s.sol:DeployHook --fork-url $(BASE_SEPOLIA_RPC_URL) --private-key $(SEPOLIA_ACCOUNT_PRIVATE_KEY_1) -vvvv

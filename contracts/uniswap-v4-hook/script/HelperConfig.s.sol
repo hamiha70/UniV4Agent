@@ -14,6 +14,7 @@ contract HelperConfig is Script {
 
     struct NetworkConfig {
         address poolManagerAddress;
+        address hookAddress;
         address hookOwnerAndDeployerAddress;
         uint256 hookOwnerAndDeployerPrivateKey;
         address poolSwapTestAddress;
@@ -41,11 +42,12 @@ contract HelperConfig is Script {
 
     function getSepoliaEthConfig() public view returns (NetworkConfig memory) {
         return NetworkConfig({
-            poolManagerAddress: 0xE03A1074c86CFeDd5C142C4F04F1a1536e203543,
+            poolManagerAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_POOL_MANAGER_ADDRESS"),
+            hookAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_HOOK_ADDRESS"),
             hookOwnerAndDeployerAddress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"), 
             hookOwnerAndDeployerPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
-            poolSwapTestAddress: 0x9B6b46e2c869aa39918Db7f52f5557FE577B6eEe,
-            poolModifyLiquidityTestAddress: 0x0C478023803a644c94c4CE1C1e7b9A087e411B0A,
+            poolSwapTestAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_POOL_SWAP_TEST_ADDRESS"),
+            poolModifyLiquidityTestAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_POOL_MODIFY_LIQUIDITY_TEST_ADDRESS"),
             create2DeployerAddress: vm.envAddress("CREATE2_DEPLOYER_ADDRESS"),
             agentAdress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"),
             agentPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
@@ -53,18 +55,19 @@ contract HelperConfig is Script {
             swapperPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
             liquidityProviderAddress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"),
             liquidityProviderPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
-            USDCAddress: 0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238,
-            LINKAddress: 0x779877A7B0D9E8603169DdbD7836e478b4624789 // Note: LINK CANNOT be minted on Sepolia Mainnet
+            USDCAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_USDC_ADDRESS"),
+            LINKAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_LINK_ADDRESS") // Note: LINK CANNOT be minted on Sepolia Mainnet
         });
     }
 
     function getBaseSepoliaConfig() public view returns (NetworkConfig memory) {
         NetworkConfig memory config = getSepoliaEthConfig();
-        config.poolManagerAddress = 0x05E73354cFDd6745C338b50BcFDfA3Aa6fA03408;
-        config.poolSwapTestAddress = 0x8B5bcC363ddE2614281aD875bad385E0A785D3B9;
-        config.poolModifyLiquidityTestAddress = 0x37429cD17Cb1454C34E7F50b09725202Fd533039;
-        config.USDCAddress = 0x036CbD53842c5426634e7929541eC2318f3dCF7e;
-        config.LINKAddress =0xE4aB69C077896252FAFBD49EFD26B5D171A32410; // Note: LINK CAN be minted on Base Sepolia
+        config.poolManagerAddress = vm.envAddress("BASE_SEPOLIA_DEPLOYED_POOL_MANAGER_ADDRESS");
+        config.hookAddress = vm.envAddress("BASE_SEPOLIA_DEPLOYED_HOOK_ADDRESS");
+        config.poolSwapTestAddress = vm.envAddress("BASE_SEPOLIA_DEPLOYED_POOL_SWAP_TEST_ADDRESS");
+        config.poolModifyLiquidityTestAddress = vm.envAddress("BASE_SEPOLIA_DEPLOYED_POOL_MODIFY_LIQUIDITY_TEST_ADDRESS");
+        config.USDCAddress = vm.envAddress("BASE_SEPOLIA_DEPLOYED_USDC_ADDRESS");
+        config.LINKAddress = vm.envAddress("BASE_SEPOLIA_DEPLOYED_LINK_ADDRESS"); // Note: LINK CAN be minted on Base Sepolia
         return config;
     }
 }
