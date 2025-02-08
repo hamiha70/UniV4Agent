@@ -9,45 +9,43 @@ import {console} from "forge-std/console.sol";
 import {Script} from "forge-std/Script.sol";
 import {DevOpsTools} from "foundry-devops/src/DevOpsTools.sol";
 
-contract ResetDampedPool is Script {
+contract SetAuthorizedAgent is Script {
+    address hookAddress;
+    uint256 hookOwnerAndDeployerPrivateKey;
+    address agentAddress;
 
-    struct NetworkConfig {
-        address poolManagerAddress;
-        address hookAddress;
-        address hookOwnerAndDeployerAddress;
-        uint256 hookOwnerAndDeployerPrivateKey;
-        address poolSwapTestAddress;
-        address poolModifyLiquidityTestAddress;
-        address create2DeployerAddress;
-        address agentAdress;
-        uint256 agentPrivateKey;
+
+    constructor() {
+        HelperConfig helperConfig = new HelperConfig();
+        (/*address _poolManagerAddress*/,
+        address _hookAddress,
+        /*address _hookOwnerAndDeployerAddress*/,
+        uint256 _hookOwnerAndDeployerPrivateKey,
+        /*address _poolSwapTestAddress*/, 
+        /*address _poolModifyLiquidityTestAddress*/,
+        /*address _create2DeployerAddress*/, 
+        address _agentAddress, 
+        /*uint256 _agentPrivateKey*/, 
+        /*address _swapperAddress*/, 
+        /*uint256 _swapperPrivateKey*/, 
+        /*address _liquidityProviderAddress*/, 
+        /*uint256 _liquidityProviderPrivateKey*/, 
+        /*address _USDCAddress*/, 
+        /*address _LINKAddress*/
+        ) = helperConfig.activeNetworkConfig();
+
+        hookAddress = _hookAddress;
+        hookOwnerAndDeployerPrivateKey = _hookOwnerAndDeployerPrivateKey;
+        agentAddress = _agentAddress;
     }
 
-
-    function resetDampedPool(address hookAddress) external {
-        HelperConfig helperConfig = new HelperConfig();
-        (address poolManagerAddress,
-        address hookAddress,
-        address hookOwnerAndDeployerAddress,
-        uint256 hookOwnerAndDeployerPrivateKey,
-        /*address poolSwapTestAddress*/, 
-        /*address poolModifyLiquidityTestAddress*/,
-        address create2DeployerAddress, 
-        /*address agentAdress*/, 
-        uint256 agentPrivateKey, 
-        /*address swapperAddress*/, 
-        /*uint256 swapperPrivateKey*/, 
-        /*address liquidityProviderAddress*/, 
-        /*uint256 liquidityProviderPrivateKey*/, 
-        address USDCAddress, 
-        address LINKAddress) = helperConfig.activeNetworkConfig();
-        vm.startBroadcast(agentPrivateKey);
+    function setAuthorizedAgent(bool isAuthorized) public {
+        vm.startBroadcast(hookOwnerAndDeployerPrivateKey);
+        AgentHook(hookAddress).setAuthorizedAgent(agentAddress, isAuthorized);
         vm.stopBroadcast();
     }
     
-    
     function run() external {
-        HelperConfig helperConfig = new HelperConfig();
-        NetworkConfig memory networkConfig = helperConfig.activeNetworkConfig;
+        setAuthorizedAgent(true);
     }
 }

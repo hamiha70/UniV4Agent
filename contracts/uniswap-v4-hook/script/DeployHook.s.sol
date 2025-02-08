@@ -14,7 +14,7 @@ contract DeployHook is Script {
     address public constant HOOK_OWNER = address(0x1);
     address public constant POOL_MANAGER = address(0x2);
 
-    function run() external returns (AgentHook agentHook, MockERC20 mockUSDC, MockERC20 mockLINK,  HelperConfig helperConfig) {
+    function run() external returns (AgentHook agentHook, MockERC20 mockETH, MockERC20 mockUSDC,  HelperConfig helperConfig) {
         helperConfig = new HelperConfig();
         (address poolManagerAddress,
         /*address hookAddress*/,
@@ -29,8 +29,9 @@ contract DeployHook is Script {
         /*uint256 swapperPrivateKey*/, 
         /*address liquidityProviderAddress*/, 
         /*uint256 liquidityProviderPrivateKey*/, 
-        address USDCAddress, 
-        address LINKAddress) = helperConfig.activeNetworkConfig();
+        address sETHAddress,
+        address sUSDCAddress 
+        ) = helperConfig.activeNetworkConfig();
         
         // Requires Mining an address that conforms to the flags
         uint160 flags = uint160(
@@ -69,9 +70,9 @@ contract DeployHook is Script {
         console.log("Hook address matches expected flags");
 
         // Initialize mock tokens
-        mockUSDC = MockERC20(USDCAddress);
-        mockLINK = MockERC20(LINKAddress);
+        mockETH = MockERC20(sETHAddress);
+        mockUSDC = MockERC20(sUSDCAddress);
 
-        return (agentHook, mockUSDC, mockLINK, helperConfig);
+        return (agentHook, mockUSDC, mockETH, helperConfig);
     }
 }
