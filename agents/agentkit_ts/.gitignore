@@ -22,6 +22,9 @@ out/
 .env.test
 .env.production
 
+# CDP AgentKit 
+**/wallet_data.txt
+
 # IDE and editor files
 .idea/
 .vscode/

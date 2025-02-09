@@ -1,9 +1,8 @@
 {
-  "extends": "../../../tsconfig.base.json",
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "preserveSymlinks": true,
-    "outDir": "./dist",
-    "rootDir": "."
+    "outDir": "dist",
+    "rootDir": "src"
   },
-  "include": ["*.ts"]
+  "include": ["src/**/*.ts"]
 }
