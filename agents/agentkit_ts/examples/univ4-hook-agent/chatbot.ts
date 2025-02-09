@@ -1,6 +1,7 @@
 import {
   AgentKit,
   CdpWalletProvider,
+  WalletProvider,
   wethActionProvider,
   walletActionProvider,
   erc20ActionProvider,
@@ -37,6 +38,7 @@ function validateEnvironment(): void {
     "CDP_API_KEY_PRIVATE_KEY",
     "BASE_SEPOLIA_HOOK_AGENT_ADDRESS",
     "BASE_SEPOLIA_HOOK_AGENT_PRIVATE_KEY",
+    "VIEM_WALLET_PROVIDER_USED",
   ];
   requiredVars.forEach((varName) => {
     if (!process.env[varName]) {
@@ -130,32 +132,46 @@ async function initializeAgent() {
     );
 
     // Choose which wallet provider to use
-    const walletProvider = walletProviderViem; // or walletProviderCDP
+    let walletProvider: WalletProvider;
+    let agentkit: AgentKit;
 
-    // Initialize AgentKit
-    const agentkit = await AgentKit.from({
-      walletProvider,
-      actionProviders: [
-        wethActionProvider(),
-        pythActionProvider(),
-        walletActionProvider(),
-        erc20ActionProvider(),
-        cdpApiActionProvider({
-          apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(
-            /\\n/g,
-            "\n"
-          ),
-        }),
-        cdpWalletActionProvider({
-          apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(
-            /\\n/g,
-            "\n"
-          ),
-        }),
-      ],
-    });
+    if (process.env.VIEM_WALLET_PROVIDER_USED === "true") {
+      walletProvider = walletProviderViem;
+      agentkit = await AgentKit.from({
+        walletProvider: walletProviderViem,
+        actionProviders: [
+          wethActionProvider(),
+          pythActionProvider(),
+          walletActionProvider(),
+          erc20ActionProvider(),
+        ],
+      });
+    } else {
+      walletProvider = walletProviderCDP;
+      agentkit = await AgentKit.from({
+        walletProvider: walletProviderCDP,
+        actionProviders: [
+          wethActionProvider(),
+          pythActionProvider(),
+          walletActionProvider(),
+          erc20ActionProvider(),
+          cdpWalletActionProvider({
+            apiKeyName: process.env.CDP_API_KEY_NAME,
+            apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(
+              /\\n/g,
+              "\n"
+            ),
+          }),
+          cdpApiActionProvider({
+            apiKeyName: process.env.CDP_API_KEY_NAME,
+            apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(
+              /\\n/g,
+              "\n"
+            ),
+          }),
+        ],
+      });
+    }
 
     const tools = await getLangChainTools(agentkit);
 
@@ -184,8 +200,16 @@ async function initializeAgent() {
     });
 
     // Save wallet data
-    const exportedWallet = await walletProvider.exportWallet();
-    fs.writeFileSync(WALLET_DATA_FILE, JSON.stringify(exportedWallet));
+    if (process.env.VIEM_WALLET_PROVIDER_USED === "false") {
+      try {
+        const exportedWallet = await (
+          walletProvider as CdpWalletProvider
+        ).exportWallet();
+        fs.writeFileSync(WALLET_DATA_FILE, JSON.stringify(exportedWallet));
+      } catch (error) {
+        console.log("Failed to export wallet:", error);
+      }
+    }
 
     return { agent, config: agentConfig };
   } catch (error) {
