@@ -312,6 +312,14 @@ contract AgentHook is BaseHook {
                            GETTERS
 //////////////////////////////////////////////////////////////*/
 
+    function getHookOwner() public view returns (address) {
+        return s_hookOwner;
+    }   
+
+    function getPoolManager() public view returns (address) {
+        return address(poolManager);
+    }
+
     function getDampedSqrtPriceX96(PoolId id) public view returns (uint160) {
         return s_dampedSqrtPriceX96[id];
     }
