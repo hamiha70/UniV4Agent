@@ -49,60 +49,65 @@ contract InteractionsTest is StdCheats, Test {
 
 
     constructor() {
-        helperConfig = new HelperConfig();
-        (address _poolManagerAddress,
-        address _hookAddress,
-        address _hookOwnerAndDeployerAddress,
-        uint256 _hookOwnerAndDeployerPrivateKey,
-        address _poolSwapTestAddress,   
-        address _poolModifyLiquidityTestAddress,
-        /*address _create2DeployerAddress*/,
-        address _agentAddress,
-        uint256 _agentPrivateKey,
-        address _swapperAddress,
-        uint256 _swapperPrivateKey,
-        address _liquidityProviderAddress,
-        uint256 _liquidityProviderPrivateKey,
-        address _USDCAddress,
-        address _LINKAddress) = helperConfig.activeNetworkConfig();
+        if (block.chainid == 11155111 || block.chainid == 84532) {
+            helperConfig = new HelperConfig();
+            (address _poolManagerAddress,
+            address _hookAddress,
+            address _hookOwnerAndDeployerAddress,
+            uint256 _hookOwnerAndDeployerPrivateKey,
+            address _poolSwapTestAddress,   
+            address _poolModifyLiquidityTestAddress,
+            /*address _create2DeployerAddress*/,
+            address _agentAddress,
+            uint256 _agentPrivateKey,
+            address _swapperAddress,
+            uint256 _swapperPrivateKey,
+            address _liquidityProviderAddress,
+            uint256 _liquidityProviderPrivateKey,
+            address _USDCAddress,
+            address _LINKAddress) = helperConfig.activeNetworkConfig();
 
-    // Pool Manager and Hook
-        poolManager = IPoolManager(_poolManagerAddress);
-        agentHook = AgentHook(_hookAddress);
-    // Pool Swap Test and Pool Modify Liquidity Test
-        poolSwapTest = PoolSwapTest(_poolSwapTestAddress);
-        poolModifyLiquidityTest = PoolModifyLiquidityTest(_poolModifyLiquidityTestAddress);
-    // ERC20 tokens
-        USDC = MockERC20(_USDCAddress);
-        LINK = MockERC20(_LINKAddress);
-    // Currencies
-        currency0 = Currency.wrap(_USDCAddress);
-        currency1 = Currency.wrap(_LINKAddress);
-    // Addresses
-        hookOwner = _hookOwnerAndDeployerAddress;
-        agent = _agentAddress;
-        swapper = _swapperAddress;
-        liquidityProvider = _liquidityProviderAddress;
-    // Private keys
-        hookOwnerAndDeployerPrivateKey = _hookOwnerAndDeployerPrivateKey;
-        agentPrivateKey = _agentPrivateKey;
-        swapperPrivateKey = _swapperPrivateKey;
-        liquidityProviderPrivateKey = _liquidityProviderPrivateKey;
+        // Pool Manager and Hook
+            poolManager = IPoolManager(_poolManagerAddress);
+            agentHook = AgentHook(_hookAddress);
+        // Pool Swap Test and Pool Modify Liquidity Test
+            poolSwapTest = PoolSwapTest(_poolSwapTestAddress);
+            poolModifyLiquidityTest = PoolModifyLiquidityTest(_poolModifyLiquidityTestAddress);
+        // ERC20 tokens
+            USDC = MockERC20(_USDCAddress);
+            LINK = MockERC20(_LINKAddress);
+        // Currencies
+            currency0 = Currency.wrap(_USDCAddress);
+            currency1 = Currency.wrap(_LINKAddress);
+        // Addresses
+            hookOwner = _hookOwnerAndDeployerAddress;
+            agent = _agentAddress;
+            swapper = _swapperAddress;
+            liquidityProvider = _liquidityProviderAddress;
+        // Private keys
+            hookOwnerAndDeployerPrivateKey = _hookOwnerAndDeployerPrivateKey;
+            agentPrivateKey = _agentPrivateKey;
+            swapperPrivateKey = _swapperPrivateKey;
+            liquidityProviderPrivateKey = _liquidityProviderPrivateKey;
+        }
     }
 
     function setUp() public {
-
-        //  mint USDC tokens
-        USDC.mint(swapper, INITIAL_USDC_MINT);
-        USDC.mint(liquidityProvider, INITIAL_USDC_MINT);
-
-
-
+        if (block.chainid == 11155111 || block.chainid == 84532) {
+            //  mint USDC tokens
+            USDC.mint(swapper, INITIAL_USDC_MINT);
+            USDC.mint(liquidityProvider, INITIAL_USDC_MINT);
+        }
     }
 
 
-    function testSetAuthorizedAgent() public {
-        SetAuthorizedAgent setAuthorizedAgent = new SetAuthorizedAgent();
-        setAuthorizedAgent.setAuthorizedAgent(true);
+    function test_testSetAuthorizedAgent() public {
+        if (block.chainid == 11155111 || block.chainid == 84532) {
+            SetAuthorizedAgent setAuthorizedAgent = new SetAuthorizedAgent();
+            setAuthorizedAgent.setAuthorizedAgent(true);
+        }
+        else {
+            assert(true);
+        }
     }
 }

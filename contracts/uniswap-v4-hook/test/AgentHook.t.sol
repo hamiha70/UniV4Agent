@@ -89,6 +89,7 @@ contract AgentHookTest is Test, Deployers {
 /*//////////////////////////////////////////////////////////////
                            MODIFIERS
 //////////////////////////////////////////////////////////////*/
+    
     modifier withAgent() {
         vm.startPrank(HOOK_OWNER);
         hook.setAuthorizedAgent(AGENT, true);
@@ -276,7 +277,7 @@ contract AgentHookTest is Test, Deployers {
         vm.stopPrank();
     }
 
-    function test_SetDampedPool_AsNonAgent() public withPool {
+    function test_SetDampedPool_AsNonAgent() public withPool withAgent {
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -292,7 +293,7 @@ contract AgentHookTest is Test, Deployers {
         vm.stopPrank();
     }
 
-    function test_ResetDampedPool_AsOwner() public withAgent withPool {
+    function test_ResetDampedPool_AsAgent() public withAgent withPool {
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -306,7 +307,7 @@ contract AgentHookTest is Test, Deployers {
         hook.setDampedPool(poolKey.toId(), SQRT_RATIO_1_1 * 2, true);
         
         // Then reset it as owner
-        vm.startPrank(HOOK_OWNER);
+        vm.startPrank(AGENT);
         vm.expectEmit(true, false, false, true);
         emit DampedPoolReset(poolKey.toId());
         hook.resetDampedPool(poolKey.toId());
@@ -317,7 +318,7 @@ contract AgentHookTest is Test, Deployers {
         vm.stopPrank();
     }
 
-    function test_ResetDampedPool_AsNonOwner() public withAgent withPool withLiquidity {
+    function test_ResetDampedPool_AsNonAgent() public withAgent withPool withLiquidity {
         PoolKey memory poolKey = PoolKey({
             currency0: currency0,
             currency1: currency1,
@@ -331,8 +332,8 @@ contract AgentHookTest is Test, Deployers {
         hook.setDampedPool(poolKey.toId(), SQRT_RATIO_2_1, true);
         
         // Try to reset as non-owner/swap
-        vm.startPrank(NON_HOOK_OWNER);
-        vm.expectRevert(AgentHook.AgentHook_NotHookOwner.selector);
+        vm.startPrank(NON_AGENT);
+        vm.expectRevert(AgentHook.AgentHook_NotAuthorizedAgent.selector);
         hook.resetDampedPool(poolKey.toId());
         vm.stopPrank();
         
