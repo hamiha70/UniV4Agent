@@ -7,6 +7,7 @@ import {
   cdpApiActionProvider,
   cdpWalletActionProvider,
   pythActionProvider,
+  ViemWalletProvider,
 } from "@coinbase/agentkit";
 import { getLangChainTools } from "@coinbase/agentkit-langchain";
 import { HumanMessage } from "@langchain/core/messages";
@@ -16,6 +17,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import * as dotenv from "dotenv";
 import * as fs from "fs";
 import * as readline from "readline";
+import { createWalletClient, http } from "viem";
 
 dotenv.config();
 
@@ -29,8 +31,14 @@ function validateEnvironment(): void {
   const missingVars: string[] = [];
 
   // Check required variables
-  const requiredVars = ["OPENAI_API_KEY", "CDP_API_KEY_NAME", "CDP_API_KEY_PRIVATE_KEY"];
-  requiredVars.forEach(varName => {
+  const requiredVars = [
+    "OPENAI_API_KEY",
+    "CDP_API_KEY_NAME",
+    "CDP_API_KEY_PRIVATE_KEY",
+    "BASE_SEPOLIA_HOOK_AGENT_ADDRESS",
+    "BASE_SEPOLIA_HOOK_AGENT_PRIVATE_KEY",
+  ];
+  requiredVars.forEach((varName) => {
     if (!process.env[varName]) {
       missingVars.push(varName);
     }
@@ -39,7 +47,7 @@ function validateEnvironment(): void {
   // Exit if any required variables are missing
   if (missingVars.length > 0) {
     console.error("Error: Required environment variables are not set");
-    missingVars.forEach(varName => {
+    missingVars.forEach((varName) => {
       console.error(`${varName}=your_${varName.toLowerCase()}_here`);
     });
     process.exit(1);
@@ -47,7 +55,9 @@ function validateEnvironment(): void {
 
   // Warn about optional NETWORK_ID
   if (!process.env.NETWORK_ID) {
-    console.warn("Warning: NETWORK_ID not set, defaulting to base-sepolia testnet");
+    console.warn(
+      "Warning: NETWORK_ID not set, defaulting to base-sepolia testnet"
+    );
   }
 }
 
@@ -82,14 +92,45 @@ async function initializeAgent() {
     }
 
     // Configure CDP Wallet Provider
-    const config = {
+    const configCDPWalletProvider = {
       apiKeyName: process.env.CDP_API_KEY_NAME,
-      apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+      apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(
+        /\\n/g,
+        "\n"
+      ),
       cdpWalletData: walletDataStr || undefined,
       networkId: process.env.NETWORK_ID || "base-sepolia",
     };
+    const walletProviderCDP = await CdpWalletProvider.configureWithWallet(
+      configCDPWalletProvider
+    );
 
-    const walletProvider = await CdpWalletProvider.configureWithWallet(config);
+    // Configure viem wallet provider
+    const configViemWalletProvider = {
+      privateKey: process.env.BASE_SEPOLIA_HOOK_AGENT_PRIVATE_KEY!,
+      account: process.env.BASE_SEPOLIA_HOOK_AGENT_ADDRESS! as `0x${string}`,
+      chain: {
+        id: 84532, // Base Sepolia chainId
+        name: "Base Sepolia",
+        network: "base-sepolia",
+        nativeCurrency: {
+          name: "Ether",
+          symbol: "ETH",
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: { http: ["https://sepolia.base.org"] },
+          public: { http: ["https://sepolia.base.org"] },
+        },
+      },
+      transport: http(),
+    };
+    const walletProviderViem = new ViemWalletProvider(
+      createWalletClient(configViemWalletProvider)
+    );
+
+    // Choose which wallet provider to use
+    const walletProvider = walletProviderViem; // or walletProviderCDP
 
     // Initialize AgentKit
     const agentkit = await AgentKit.from({
@@ -101,11 +142,17 @@ async function initializeAgent() {
         erc20ActionProvider(),
         cdpApiActionProvider({
           apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(
+            /\\n/g,
+            "\n"
+          ),
         }),
         cdpWalletActionProvider({
           apiKeyName: process.env.CDP_API_KEY_NAME,
-          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+          apiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY?.replace(
+            /\\n/g,
+            "\n"
+          ),
         }),
       ],
     });
@@ -114,7 +161,9 @@ async function initializeAgent() {
 
     // Store buffered conversation history in memory
     const memory = new MemorySaver();
-    const agentConfig = { configurable: { thread_id: "CDP AgentKit Chatbot Example!" } };
+    const agentConfig = {
+      configurable: { thread_id: "CDP AgentKit Chatbot Example!" },
+    };
 
     // Create React Agent using the LLM and CDP AgentKit tools
     const agent = createReactAgent({
@@ -163,7 +212,10 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
         "Be creative and do something interesting on the blockchain. " +
         "Choose an action or set of actions and execute it that highlights your abilities.";
 
-      const stream = await agent.stream({ messages: [new HumanMessage(thought)] }, config);
+      const stream = await agent.stream(
+        { messages: [new HumanMessage(thought)] },
+        config
+      );
 
       for await (const chunk of stream) {
         if ("agent" in chunk) {
@@ -174,7 +226,7 @@ async function runAutonomousMode(agent: any, config: any, interval = 10) {
         console.log("-------------------");
       }
 
-      await new Promise(resolve => setTimeout(resolve, interval * 1000));
+      await new Promise((resolve) => setTimeout(resolve, interval * 1000));
     } catch (error) {
       if (error instanceof Error) {
         console.error("Error:", error.message);
@@ -200,7 +252,7 @@ async function runChatMode(agent: any, config: any) {
   });
 
   const question = (prompt: string): Promise<string> =>
-    new Promise(resolve => rl.question(prompt, resolve));
+    new Promise((resolve) => rl.question(prompt, resolve));
 
   try {
     // eslint-disable-next-line no-constant-condition
@@ -211,7 +263,10 @@ async function runChatMode(agent: any, config: any) {
         break;
       }
 
-      const stream = await agent.stream({ messages: [new HumanMessage(userInput)] }, config);
+      const stream = await agent.stream(
+        { messages: [new HumanMessage(userInput)] },
+        config
+      );
 
       for await (const chunk of stream) {
         if ("agent" in chunk) {
@@ -244,7 +299,7 @@ async function chooseMode(): Promise<"chat" | "auto"> {
   });
 
   const question = (prompt: string): Promise<string> =>
-    new Promise(resolve => rl.question(prompt, resolve));
+    new Promise((resolve) => rl.question(prompt, resolve));
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -290,7 +345,7 @@ async function main() {
 
 if (require.main === module) {
   console.log("Starting Agent...");
-  main().catch(error => {
+  main().catch((error) => {
     console.error("Fatal error:", error);
     process.exit(1);
   });
