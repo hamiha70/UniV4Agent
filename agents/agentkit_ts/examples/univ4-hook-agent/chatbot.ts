@@ -39,6 +39,7 @@ function validateEnvironment(): void {
     "BASE_SEPOLIA_HOOK_AGENT_ADDRESS",
     "BASE_SEPOLIA_HOOK_AGENT_PRIVATE_KEY",
     "VIEM_WALLET_PROVIDER_USED",
+    "BASE_SEPOLIA_RPC_URL",
   ];
   requiredVars.forEach((varName) => {
     if (!process.env[varName]) {
@@ -120,9 +121,21 @@ async function initializeAgent() {
           symbol: "ETH",
           decimals: 18,
         },
+        // TODO: remove this when we use viem walletand    we have a quicknode rpc url
+        // rpcUrls: {
+        //   default: {
+        //     http: ["https://sepolia.base.org"]
+        //   },
+        //   public: {
+        //     http: ["https://sepolia.base.org"]
+        //   },
         rpcUrls: {
-          default: { http: ["https://sepolia.base.org"] },
-          public: { http: ["https://sepolia.base.org"] },
+          default: {
+            http: [`${process.env.BASE_SEPOLIA_RPC_URL}`],
+          },
+          public: {
+            http: [`${process.env.BASE_SEPOLIA_RPC_URL}`],
+          },
         },
       },
       transport: http(),
