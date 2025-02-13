@@ -10,7 +10,8 @@
     "lint": "eslint -c .eslintrc.json *.ts",
     "lint-fix": "eslint -c .eslintrc.json *.ts --fix",
     "format": "prettier -c .prettierrc --write \"**/*.{ts,js,cjs,json,md}\"",
-    "format-check": "prettier -c .prettierrc --check \"**/*.{ts,js,cjs,json,md}\""
+    "format-check": "prettier -c .prettierrc --check \"**/*.{ts,js,cjs,json,md}\"",
+    "test": "jest"
   },
   "dependencies": {
     "@coinbase/agentkit": "^0.1.1",
@@ -28,5 +29,12 @@
     "nodemon": "^3.1.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/*.test.ts"
+    ]
   }
 }

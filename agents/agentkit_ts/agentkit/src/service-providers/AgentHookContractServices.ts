@@ -1,5 +1,6 @@
 import { type EvmWalletProvider } from "../wallet-providers/evmWalletProvider";
 import { type Address } from "viem";
+import { encodeFunctionData } from "viem";
 
 // This service is used to interact with an AgentHook contract
 // Read functions
@@ -26,11 +27,11 @@ import { type Address } from "viem";
 // Contract ABIs
 const HOOK_ABIs = {
   getPoolManager: {
-    inputs: [],
+    type: "function" as const,
     name: "poolManager",
+    inputs: [],
     outputs: [{ type: "address" }],
     stateMutability: "view",
-    type: "function",
   },
   getHookOwner: {
     inputs: [],
@@ -60,7 +61,7 @@ const HOOK_ABIs = {
     stateMutability: "nonpayable",
     type: "function",
   },
-};
+} as const;
 
 export class AgentHookContractServices {
   private walletProvider: EvmWalletProvider;
@@ -86,11 +87,11 @@ export class AgentHookContractServices {
   ): Promise<`0x${string}`> {
     return await this.walletProvider.sendTransaction({
       to: hookAddress,
-      data: {
+      data: encodeFunctionData({
         abi: [HOOK_ABIs.setAuthorizedAgent],
         functionName: "setAuthorizedAgent",
         args: [agent, authorized],
-      },
+      }),
     });
   }
 }

@@ -110,7 +110,8 @@ async function initializeAgent() {
 
     // Configure viem wallet provider
     const configViemWalletProvider = {
-      privateKey: process.env.BASE_SEPOLIA_HOOK_AGENT_PRIVATE_KEY!,
+      privateKey: process.env
+        .BASE_SEPOLIA_HOOK_AGENT_PRIVATE_KEY! as `0x${string}`,
       account: process.env.BASE_SEPOLIA_HOOK_AGENT_ADDRESS! as `0x${string}`,
       chain: {
         id: 84532, // Base Sepolia chainId
