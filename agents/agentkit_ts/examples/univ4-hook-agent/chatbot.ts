@@ -19,8 +19,48 @@ import * as dotenv from "dotenv";
 import * as fs from "fs";
 import * as readline from "readline";
 import { createWalletClient, http } from "viem";
+import dotenvExpand from "dotenv-expand";
+import path from "path";
 
-dotenv.config();
+// Go up one more level to reach the root env directory
+const envPath = path.resolve(__dirname, "../../../../env");
+
+console.log("Environment path:", envPath);
+
+// Check if directory exists
+if (!fs.existsSync(envPath)) {
+  console.error(`Environment directory not found at: ${envPath}`);
+  process.exit(1);
+}
+
+// Check each env file before loading
+const envFiles = [
+  ".env.local",
+  ".env.agent",
+  ".env.hook",
+  ".env.uniswap.public",
+];
+
+envFiles.forEach((file) => {
+  const filePath = path.join(envPath, file);
+  if (!fs.existsSync(filePath)) {
+    console.error(`Environment file not found: ${filePath}`);
+    process.exit(1);
+  }
+});
+
+// Load and expand environment variables
+const env1 = dotenv.config({ path: path.join(envPath, ".env.local") });
+dotenvExpand.expand(env1);
+
+const env2 = dotenv.config({ path: path.join(envPath, ".env.agent") });
+dotenvExpand.expand(env2);
+
+const env3 = dotenv.config({ path: path.join(envPath, ".env.hook") });
+dotenvExpand.expand(env3);
+
+const env4 = dotenv.config({ path: path.join(envPath, ".env.uniswap.public") });
+dotenvExpand.expand(env4);
 
 /**
  * Validates that required environment variables are set
@@ -36,8 +76,8 @@ function validateEnvironment(): void {
     "OPENAI_API_KEY",
     "CDP_API_KEY_NAME",
     "CDP_API_KEY_PRIVATE_KEY",
-    "BASE_SEPOLIA_HOOK_AGENT_ADDRESS",
-    "BASE_SEPOLIA_HOOK_AGENT_PRIVATE_KEY",
+    "AGENT_ADDRESS",
+    "AGENT_PRIVATE_KEY",
     "VIEM_WALLET_PROVIDER_USED",
     "BASE_SEPOLIA_RPC_URL",
   ];
@@ -110,9 +150,8 @@ async function initializeAgent() {
 
     // Configure viem wallet provider
     const configViemWalletProvider = {
-      privateKey: process.env
-        .BASE_SEPOLIA_HOOK_AGENT_PRIVATE_KEY! as `0x${string}`,
-      account: process.env.BASE_SEPOLIA_HOOK_AGENT_ADDRESS! as `0x${string}`,
+      privateKey: process.env.AGENT_PRIVATE_KEY! as `0x${string}`,
+      account: process.env.AGENT_ADDRESS! as `0x${string}`,
       chain: {
         id: 84532, // Base Sepolia chainId
         name: "Base Sepolia",
@@ -132,10 +171,10 @@ async function initializeAgent() {
         //   },
         rpcUrls: {
           default: {
-            http: [`${process.env.BASE_SEPOLIA_RPC_URL}`],
+            http: [`${process.env.RPC_URL}`],
           },
           public: {
-            http: [`${process.env.BASE_SEPOLIA_RPC_URL}`],
+            http: [`${process.env.RPC_URL}`],
           },
         },
       },

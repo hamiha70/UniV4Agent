@@ -2,12 +2,12 @@
 
 # Environment files excluded from git
 env/.env.local
-env/.env.agenthook
 env/.env.merged.local
 .env 
 
 # Environment files included in git
 !env/.env.foundry
-!env/.env.example
+!env/.env.localexample
+!env/.env.agenthook
 !env/.env.hook
 !env/.env.uniswap
