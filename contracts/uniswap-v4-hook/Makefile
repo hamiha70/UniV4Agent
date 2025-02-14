@@ -1,6 +1,11 @@
--include .env
+-include env/.env.foundry
+-include env/.env.local
+-include env/.env.public
+-include env/.env.tokens
+-include env/.env.uniswap
+-include env/.env.hook
 
-.PHONY: all test clean deploy fund help install snapshot format anvil  deploy-anvil deploy-sepolia deploy-base deploy-base-sepolia verify-sepolia-mainnet-contract verify-base-sepolia-contract
+.PHONY: all test clean deploy fund help install snapshot format anvil deploy-anvil deploy-sepolia-mainnet deploy-sepolia-base verify-sepolia-mainnet-contract verify-base-sepolia-contract fork-deploy-sepolia-mainnet fork-deploy-sepolia-base
 
 DEFAULT_ANVIL_KEY := 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 

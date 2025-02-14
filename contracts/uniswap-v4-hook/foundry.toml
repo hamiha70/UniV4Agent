@@ -11,6 +11,7 @@ remappings = [
     "ds-test/=lib/v4-core/lib/forge-std/lib/ds-test/src/",
     "@openzeppelin/=lib/v4-core/lib/openzeppelin-contracts/"
 ]
+env_file = ".env.merged.local"
 
 # Optimization settings
 optimizer = true

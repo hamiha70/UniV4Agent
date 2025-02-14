@@ -42,12 +42,12 @@ contract HelperConfig is Script {
 
     function getSepoliaEthConfig() public view returns (NetworkConfig memory) {
         return NetworkConfig({
-            poolManagerAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_POOL_MANAGER_ADDRESS"),
-            hookAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_HOOK_ADDRESS"),
+            poolManagerAddress: vm.envAddress("MAINNET_SEPOLIA_DEPLOYED_POOL_MANAGER_ADDRESS"),
+            hookAddress: vm.envAddress("MAINNET_SEPOLIA_DEPLOYED_HOOK_ADDRESS"),
             hookOwnerAndDeployerAddress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"), 
             hookOwnerAndDeployerPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
-            poolSwapTestAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_POOL_SWAP_TEST_ADDRESS"),
-            poolModifyLiquidityTestAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_POOL_MODIFY_LIQUIDITY_TEST_ADDRESS"),
+            poolSwapTestAddress: vm.envAddress("MAINNET_SEPOLIA_DEPLOYED_POOL_SWAP_TEST_ADDRESS"),
+            poolModifyLiquidityTestAddress: vm.envAddress("MAINNET_SEPOLIA_DEPLOYED_POOL_MODIFY_LIQUIDITY_TEST_ADDRESS"),
             create2DeployerAddress: vm.envAddress("CREATE2_DEPLOYER_ADDRESS"),
             agentAdress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"),
             agentPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
@@ -55,8 +55,8 @@ contract HelperConfig is Script {
             swapperPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
             liquidityProviderAddress: vm.envAddress("SEPOLIA_ACCOUNT_ADDRESS_1"),
             liquidityProviderPrivateKey: vm.envUint("SEPOLIA_ACCOUNT_PRIVATE_KEY_1"),
-            sETHAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_sETH_ADDRESS"),
-            sUSDCAddress: vm.envAddress("SEPOLIA_MAINNET_DEPLOYED_sUSDC_ADDRESS") // Note: LINK CANNOT be minted on Sepolia Mainnet
+            sETHAddress: vm.envAddress("MAINNET_SEPOLIA_DEPLOYED_sETH_ADDRESS"),
+            sUSDCAddress: vm.envAddress("MAINNET_SEPOLIA_DEPLOYED_sUSDC_ADDRESS") // Note: LINK CANNOT be minted on Sepolia Mainnet
         });
     }
 
